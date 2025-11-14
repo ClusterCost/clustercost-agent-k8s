@@ -154,3 +154,5 @@ docker run --rm -p 8080:8080 \
   -e CLUSTERCOST_CLUSTER_NAME=dev-cluster \
   ghcr.io/you/clustercost-agent-k8s:dev
 ```
+
+GitHub Actions builds and publishes multi-architecture (amd64 + arm64) images to Docker Hub via `.github/workflows/docker.yml`. Configure the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` with push access to your Docker Hub namespace before triggering the workflow.
