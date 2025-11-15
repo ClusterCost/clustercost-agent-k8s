@@ -42,6 +42,8 @@ helm install clustercost-agent deployment/helm \
   --namespace clustercost --create-namespace
 ```
 
+See `deployment/helm/README.md` for chart-specific configuration guidance and the full values reference.
+
 ## Configuration
 
 | Source | Notes |
@@ -156,3 +158,23 @@ docker run --rm -p 8080:8080 \
 ```
 
 GitHub Actions builds and publishes multi-architecture (amd64 + arm64) images to Docker Hub via `.github/workflows/docker.yml`. Configure the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` with push access to your Docker Hub namespace before triggering the workflow.
+
+### Release workflow
+
+Trigger `.github/workflows/release.yml` (workflow_dispatch) to cut a GitHub Release on demand:
+
+1. Open the "Manual Release" workflow in GitHub Actions.
+2. Provide a semantic version tag (e.g., `v0.2.0`).
+3. The workflow runs `go test ./...` and, if successful, creates a GitHub Release with auto-generated release notes that summarize commit history since the previous tag.
+
+Publishing a release automatically triggers the Docker workflow (via the tag), producing multi-arch container images for that version.
+
+## CI & Quality Gates
+
+Every push/PR runs `.github/workflows/ci.yml`, which executes:
+
+- `go test ./...`
+- `golangci-lint` (formatting, vet, staticcheck, etc.) using `.golangci.yml`
+- `gosec` for static security scanning
+
+Fix issues locally via `make test` and `make lint` before pushing to keep CI green.

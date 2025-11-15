@@ -5,6 +5,9 @@ metadata:
   name: {{ include "clustercost-agent-k8s.fullname" . }}
   labels:
     {{- include "clustercost-agent-k8s.labels" . | nindent 4 }}
+    {{- with .Values.metricsServiceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
 spec:
   selector:
     matchLabels:
