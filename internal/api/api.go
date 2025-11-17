@@ -10,40 +10,72 @@ import (
 
 // Handler serves the agent HTTP API.
 type Handler struct {
-	clusterID string
-	store     *snapshot.Store
+	clusterType   string
+	clusterName   string
+	clusterRegion string
+	version       string
+	store         *snapshot.Store
 }
 
 // NewHandler builds a Handler bound to the snapshot store.
-func NewHandler(clusterID string, store *snapshot.Store) *Handler {
+func NewHandler(clusterType, clusterName, clusterRegion, version string, store *snapshot.Store) *Handler {
 	return &Handler{
-		clusterID: clusterID,
-		store:     store,
+		clusterType:   clusterType,
+		clusterName:   clusterName,
+		clusterRegion: clusterRegion,
+		version:       version,
+		store:         store,
 	}
 }
 
 // Register wires all API endpoints on the mux.
 func (h *Handler) Register(mux *http.ServeMux) {
+	mux.HandleFunc("/agent/v1/overview", h.overview)
 	mux.HandleFunc("/agent/v1/health", h.health)
 	mux.HandleFunc("/agent/v1/namespaces", h.namespaces)
 	mux.HandleFunc("/agent/v1/nodes", h.nodes)
 	mux.HandleFunc("/agent/v1/resources", h.resources)
 }
 
+func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
+	status := "initializing"
+	timestamp := time.Now().UTC()
+	if snap, ok := h.store.Latest(); ok {
+		status = "ok"
+		timestamp = snap.Timestamp.UTC()
+	}
+
+	payload := map[string]any{
+		"status":        status,
+		"clusterType":   h.clusterType,
+		"clusterName":   h.clusterName,
+		"clusterRegion": h.clusterRegion,
+		"version":       h.version,
+		"timestamp":     timestamp.Format(time.RFC3339Nano),
+	}
+	respondJSON(w, http.StatusOK, payload)
+}
+
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
 	if snap, ok := h.store.Latest(); ok {
 		payload := map[string]any{
-			"status":    "ok",
-			"clusterId": h.clusterID,
-			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
+			"status":        "ok",
+			"clusterType":   h.clusterType,
+			"clusterName":   h.clusterName,
+			"clusterRegion": h.clusterRegion,
+			"version":       h.version,
+			"timestamp":     snap.Timestamp.UTC().Format(time.RFC3339Nano),
 		}
 		respondJSON(w, http.StatusOK, payload)
 		return
 	}
 	payload := map[string]any{
-		"status":    "initializing",
-		"clusterId": h.clusterID,
-		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+		"status":        "initializing",
+		"clusterType":   h.clusterType,
+		"clusterName":   h.clusterName,
+		"clusterRegion": h.clusterRegion,
+		"version":       h.version,
+		"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	respondJSON(w, http.StatusOK, payload)
 }
