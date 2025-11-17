@@ -38,6 +38,9 @@ pricing:
 	if cfg.ClusterName != "env-cluster" {
 		t.Fatalf("expected env cluster name, got %s", cfg.ClusterName)
 	}
+	if cfg.ClusterID != "env-cluster" {
+		t.Fatalf("expected cluster ID synced with name, got %s", cfg.ClusterID)
+	}
 	if cfg.ScrapeIntervalSeconds != 15 {
 		t.Fatalf("expected scrape interval 15, got %d", cfg.ScrapeIntervalSeconds)
 	}

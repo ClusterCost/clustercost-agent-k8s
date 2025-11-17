@@ -10,14 +10,15 @@ import (
 	"syscall"
 	"time"
 
-	"clustercost-agent-k8s/internal/aggregator"
+	"clustercost-agent-k8s/internal/api"
 	"clustercost-agent-k8s/internal/collector"
 	"clustercost-agent-k8s/internal/config"
-	"clustercost-agent-k8s/internal/enricher"
 	"clustercost-agent-k8s/internal/exporter"
 	"clustercost-agent-k8s/internal/kube"
 	"clustercost-agent-k8s/internal/logging"
-	"clustercost-agent-k8s/internal/pricing"
+	"clustercost-agent-k8s/internal/snapshot"
+
+	"k8s.io/apimachinery/pkg/labels"
 )
 
 func main() {
@@ -31,36 +32,39 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	kubeClient, err := kube.NewClient(cfg.ClusterName, cfg.KubeconfigPath)
+	clusterID := cfg.ClusterID
+	kubeClient, err := kube.NewClient(clusterID, cfg.KubeconfigPath)
 	if err != nil {
 		logger.Error("failed to create kube client", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	clusterCollector := collector.NewClusterCollector(kubeClient, logger)
-	metricsCollector := collector.NewMetricsCollector(kubeClient, logger)
-	calc := pricing.NewCalculator(cfg.Pricing.CPUCoreHourPriceUSD, cfg.Pricing.MemoryGiBHourPriceUSD)
-	labelEnricher := enricher.NewLabelEnricher()
-	var nodePricer pricing.NodePriceResolver
-	if cfg.Pricing.Provider == "aws" {
-		awsPricer, err := pricing.NewAWSPricing(cfg.Pricing.Region, cfg.Pricing.AWS.NodePrices)
-		if err != nil {
-			logger.Warn("failed to initialise AWS pricing resolver", slog.String("error", err.Error()))
-		} else {
-			nodePricer = awsPricer
-		}
+	cache := kube.NewClusterCache(kubeClient.Kubernetes, 0)
+	if err := cache.Start(ctx); err != nil {
+		logger.Error("failed to start informers", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
-	agg := aggregator.NewCostAggregator(calc, labelEnricher, nodePricer, cfg.Pricing.Provider, cfg.Pricing.Region, logger)
-	promExporter := exporter.NewPrometheusExporter(cfg.ClusterName)
-	api := exporter.NewHTTPAPI(agg)
 
+	metricsCollector := collector.NewMetricsCollector(kubeClient, logger)
+	classifier := snapshot.NewEnvironmentClassifier(snapshot.ClassifierConfig{
+		LabelKeys:              cfg.Environment.LabelKeys,
+		ProductionLabelValues:  cfg.Environment.ProductionLabelValues,
+		NonProdLabelValues:     cfg.Environment.NonProdLabelValues,
+		SystemLabelValues:      cfg.Environment.SystemLabelValues,
+		ProductionNameContains: cfg.Environment.ProductionNameContains,
+		SystemNamespaces:       cfg.Environment.SystemNamespaces,
+	})
+	priceLookup := snapshot.NewNodePriceLookup(cfg.Pricing.InstancePrices, cfg.Pricing.DefaultNodeHourlyUSD)
+	builder := snapshot.NewBuilder(clusterID, classifier, priceLookup)
+	store := snapshot.NewStore()
+
+	go runSnapshotLoop(ctx, builder, cache, metricsCollector, store, cfg.ScrapeInterval(), logger)
+
+	apiHandler := api.NewHandler(clusterID, store)
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promExporter.Handler())
-	api.Register(mux)
+	apiHandler.Register(mux)
 
 	server := exporter.NewServer(cfg.ListenAddr, mux, logger)
-
-	go runScraper(ctx, clusterCollector, metricsCollector, agg, promExporter, cfg.ScrapeInterval(), logger)
 
 	if err := server.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("server error", slog.String("error", err.Error()))
@@ -68,13 +72,13 @@ func main() {
 	}
 }
 
-func runScraper(ctx context.Context, clusterCollector *collector.ClusterCollector, metricsCollector *collector.MetricsCollector, agg *aggregator.CostAggregator, promExporter *exporter.PrometheusExporter, interval time.Duration, logger *slog.Logger) {
+func runSnapshotLoop(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector *collector.MetricsCollector, store *snapshot.Store, interval time.Duration, logger *slog.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
-		if err := scrapeOnce(ctx, clusterCollector, metricsCollector, agg, promExporter, logger); err != nil {
-			logger.Warn("scrape failed", slog.String("error", err.Error()))
+		if err := buildOnce(ctx, builder, cache, metricsCollector, store, logger); err != nil {
+			logger.Warn("snapshot refresh failed", slog.String("error", err.Error()))
 		}
 
 		select {
@@ -85,23 +89,27 @@ func runScraper(ctx context.Context, clusterCollector *collector.ClusterCollecto
 	}
 }
 
-func scrapeOnce(ctx context.Context, clusterCollector *collector.ClusterCollector, metricsCollector *collector.MetricsCollector, agg *aggregator.CostAggregator, promExporter *exporter.PrometheusExporter, logger *slog.Logger) error {
-	scrapeCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-	defer cancel()
-
-	snapshot, err := clusterCollector.Collect(scrapeCtx)
+func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector *collector.MetricsCollector, store *snapshot.Store, logger *slog.Logger) error {
+	nodes, err := cache.NodeLister().List(labels.Everything())
+	if err != nil {
+		return err
+	}
+	namespaces, err := cache.NamespaceLister().List(labels.Everything())
+	if err != nil {
+		return err
+	}
+	pods, err := cache.PodLister().List(labels.Everything())
 	if err != nil {
 		return err
 	}
 
-	metrics, err := metricsCollector.CollectPodMetrics(scrapeCtx)
-	if err != nil {
-		logger.Warn("using requests due to metrics error", slog.String("error", err.Error()))
-		metrics = map[string]kube.PodUsage{}
+	metricsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	usage, metricsErr := metricsCollector.CollectPodMetrics(metricsCtx)
+	cancel()
+	if metricsErr != nil {
+		logger.Warn("using cached pod metrics", slog.String("error", metricsErr.Error()))
 	}
 
-	data := agg.Aggregate(snapshot, metrics)
-	promExporter.Update(data)
-
+	store.Update(builder.Build(nodes, namespaces, pods, usage, time.Now().UTC()))
 	return nil
 }

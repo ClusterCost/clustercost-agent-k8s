@@ -31,8 +31,11 @@ type PodCost struct {
 type NamespaceCost struct {
 	Namespace          string            `json:"namespace"`
 	HourlyCost         float64           `json:"hourlyCost"`
+	PodCount           int               `json:"podCount"`
 	CPURequestMilli    int64             `json:"cpuRequestMilli"`
 	MemoryRequestBytes int64             `json:"memoryRequestBytes"`
+	CPUUsageMilli      int64             `json:"cpuUsageMilli"`
+	MemoryUsageBytes   int64             `json:"memoryUsageBytes"`
 	Labels             map[string]string `json:"labels"`
 }
 
@@ -200,8 +203,11 @@ func (a *CostAggregator) Aggregate(snapshot kube.ClusterSnapshot, usage map[stri
 
 		nsTotals := ensureNamespace(nsMap, pod.Namespace, labels)
 		nsTotals.HourlyCost += cost
+		nsTotals.PodCount++
 		nsTotals.CPURequestMilli += cpuReq
 		nsTotals.MemoryRequestBytes += memReq
+		nsTotals.CPUUsageMilli += cpuUsage
+		nsTotals.MemoryUsageBytes += memUsage
 
 		nodeTotals := ensureNode(nodeMap, pod.NodeName)
 		nodeTotals.AllocatedCostHourly += cost

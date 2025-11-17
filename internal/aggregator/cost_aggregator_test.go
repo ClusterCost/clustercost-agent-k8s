@@ -68,11 +68,31 @@ func TestCostAggregatorAggregate(t *testing.T) {
 	if len(data.Pods) != 1 {
 		t.Fatalf("expected 1 pod result, got %d", len(data.Pods))
 	}
+	if len(data.Namespaces) != 1 {
+		t.Fatalf("expected 1 namespace result, got %d", len(data.Namespaces))
+	}
 
 	pod := data.Pods[0]
 	expectedCost := calc.CostFor(300, 512*1024*1024)
 	if pod.HourlyCost != expectedCost {
 		t.Fatalf("expected pod cost %.2f, got %.2f", expectedCost, pod.HourlyCost)
+	}
+
+	ns := data.Namespaces[0]
+	if ns.PodCount != 1 {
+		t.Fatalf("expected namespace pod count=1 got %d", ns.PodCount)
+	}
+	if ns.CPURequestMilli != 200 {
+		t.Fatalf("expected namespace CPU request=200 got %d", ns.CPURequestMilli)
+	}
+	if ns.MemoryRequestBytes != 512*1024*1024 {
+		t.Fatalf("expected namespace memory request=512MiB got %d", ns.MemoryRequestBytes)
+	}
+	if ns.CPUUsageMilli != 300 {
+		t.Fatalf("expected namespace CPU usage=300 got %d", ns.CPUUsageMilli)
+	}
+	if ns.MemoryUsageBytes != 512*1024*1024 {
+		t.Fatalf("expected namespace memory usage=512MiB got %d", ns.MemoryUsageBytes)
 	}
 
 	if data.Cluster.HourlyCost != expectedCost {
