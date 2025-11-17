@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: clustercost/clustercost-agent-k8s
+  IMAGE_NAME: jesuspaz/clustercost-agent-k8s
 
 jobs:
   build:
