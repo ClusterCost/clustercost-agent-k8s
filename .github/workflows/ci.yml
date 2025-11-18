@@ -36,9 +36,9 @@ jobs:
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v1.61
+          version: latest
           args: --config .golangci.yml
           install-mode: goinstall
 

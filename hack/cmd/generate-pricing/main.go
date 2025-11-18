@@ -231,7 +231,7 @@ func fetchOnDemandPrice(ctx context.Context, client *pricing.Client, locationNam
 }
 
 func writeGoFile(path string, data map[string]map[string]float64) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
 
@@ -265,7 +265,7 @@ func writeGoFile(path string, data map[string]map[string]float64) error {
 	buf.WriteString("\t}\n")
 	buf.WriteString("}\n")
 
-	return os.WriteFile(path, buf.Bytes(), 0o644)
+	return os.WriteFile(path, buf.Bytes(), 0o600)
 }
 
 func discoverInstanceTypes(ctx context.Context, cfg aws.Config) ([]string, error) {

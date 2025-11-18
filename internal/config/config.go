@@ -160,7 +160,7 @@ func Load() (Config, error) {
 }
 
 func loadFromFile(path string, cfg *Config) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path provided by cluster operator
 	if err != nil {
 		return fmt.Errorf("read config file: %w", err)
 	}
