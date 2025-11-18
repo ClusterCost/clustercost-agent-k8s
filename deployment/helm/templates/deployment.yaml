@@ -48,7 +48,7 @@ spec:
               value: /etc/clustercost/config.yaml
             - name: CLUSTERCOST_LOG_LEVEL
               value: {{ .Values.logLevel | quote }}
-            - name: CLUSTERCOST_CLUSTER_NAME
+            - name: CLUSTER_NAME
               value: {{ .Values.clusterName | quote }}
             {{- range .Values.extraEnv }}
             - name: {{ .name }}

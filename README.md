@@ -35,6 +35,8 @@ helm install clustercost-agent clustercost/clustercost-agent-k8s \
   --set clusterName=my-prod-cluster
 ```
 
+The agent will try to auto-detect the cluster name, but setting `--set clusterName=...` (or the `CLUSTER_NAME` env var) gives you exact control with zero guesswork.
+
 For local development, use the bundled chart:
 
 ```bash
@@ -49,7 +51,7 @@ See `deployment/helm/README.md` for chart-specific configuration guidance and th
 | Source | Notes |
 | --- | --- |
 | **Flags** | `--listen-addr`, `--scrape-interval`, `--cluster-name`, `--cpu-price`, `--memory-price`, etc. |
-| **Environment** | `CLUSTERCOST_LOG_LEVEL`, `CLUSTERCOST_LISTEN_ADDR`, `CLUSTERCOST_SCRAPE_INTERVAL`, `CLUSTERCOST_CPU_HOUR_PRICE`, `CLUSTERCOST_MEMORY_GIB_HOUR_PRICE`, `CLUSTERCOST_PROVIDER`, `CLUSTERCOST_REGION`, `CLUSTERCOST_CLUSTER_NAME`. |
+| **Environment** | `CLUSTER_NAME` (hard override for the displayed cluster name), `CLUSTERCOST_LOG_LEVEL`, `CLUSTERCOST_LISTEN_ADDR`, `CLUSTERCOST_SCRAPE_INTERVAL`, `CLUSTERCOST_CPU_HOUR_PRICE`, `CLUSTERCOST_MEMORY_GIB_HOUR_PRICE`, `CLUSTERCOST_PROVIDER`, `CLUSTERCOST_REGION`, `CLUSTERCOST_CLUSTER_NAME`. |
 | **ConfigMap YAML** | Mounted file referenced via `CLUSTERCOST_CONFIG_FILE` or `--config`. Keys mirror the struct names in `internal/config`. |
 
 Example ConfigMap snippet:

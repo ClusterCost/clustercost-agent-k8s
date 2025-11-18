@@ -33,6 +33,7 @@ helm install clustercost-agent ./deployment/helm \
 | `extraEnv` / `extraEnvFrom` | Additional environment variables | `[]` |
 | `service.port` | HTTP/metrics port | `8080` |
 | `service.annotations` | Extra annotations for the Service | `{}` |
+| `clusterName` | Name advertised on the API/metrics (`CLUSTER_NAME` env) | `kubernetes` |
 | `pricing.*` | CPU/memory pricing + optional AWS node prices overrides | see `values.yaml` |
 | `config.existingConfigMap` | Use an externally managed ConfigMap for `config.yaml` | `""` |
 | `metricsServiceMonitor.enabled` | Create ServiceMonitor for Prometheus Operator | `false` |
@@ -64,3 +65,6 @@ The chart will skip creating its own ConfigMap and mount the provided one.
 ## Upgrading
 
 Review `values.yaml` and this README for new fields when upgrading; Helm will restart the Deployment when config changes.
+### Cluster name
+
+Set `clusterName` (or add `CLUSTER_NAME` to `extraEnv`) if you want to pin the display name; otherwise the agent will fall back to auto detection/`unknown`.
