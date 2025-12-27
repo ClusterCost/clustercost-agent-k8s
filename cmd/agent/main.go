@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cilium/ebpf/rlimit"
-
 	"clustercost-agent-k8s/internal/api"
 	"clustercost-agent-k8s/internal/collector"
 	"clustercost-agent-k8s/internal/config"
@@ -28,10 +26,6 @@ import (
 )
 
 func main() {
-	if err := rlimit.RemoveMemlock(); err != nil {
-		slog.Warn("failed to remove memlock limit", slog.String("error", err.Error()))
-	}
-
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)
@@ -127,12 +121,27 @@ func main() {
 		os.Exit(1)
 	}
 
-	ebpfMgr, err := ebpf.Start(cfg, logger)
-	if err != nil {
-		logger.Error("failed to start eBPF programs", slog.String("error", err.Error()))
-		os.Exit(1)
+	if cfg.Metrics.Enabled || cfg.Network.Enabled {
+		report := ebpf.Preflight(cfg)
+		if report.HasErrors() {
+			for _, issue := range report.Issues {
+				logger.Error("eBPF preflight failed", slog.String("component", issue.Component), slog.String("error", issue.Message))
+			}
+			logger.Warn("disabling eBPF collectors due to preflight errors")
+			cfg.Metrics.Enabled = false
+			cfg.Network.Enabled = false
+		}
 	}
-	defer ebpfMgr.Close()
+
+	var ebpfMgr *ebpf.Manager
+	if cfg.Metrics.Enabled || cfg.Network.Enabled {
+		ebpfMgr, err = ebpf.Start(cfg, logger)
+		if err != nil {
+			logger.Error("failed to start eBPF programs", slog.String("error", err.Error()))
+			os.Exit(1)
+		}
+		defer ebpfMgr.Close()
+	}
 
 	metricsCollector := collector.NewPodMetricsCollector(cfg.Metrics, logger)
 	networkCollector := collector.NewNetworkCollector(collector.NetworkCollectorConfig{
