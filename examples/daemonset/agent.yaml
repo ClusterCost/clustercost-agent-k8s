@@ -68,6 +68,13 @@ spec:
           imagePullPolicy: IfNotPresent
           securityContext:
             privileged: true
+            allowPrivilegeEscalation: true
+            capabilities:
+              add:
+                - SYS_RESOURCE
+                - SYS_ADMIN
+                - BPF
+                - PERFMON
           env:
             - name: NODE_NAME
               valueFrom:

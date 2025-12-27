@@ -4,6 +4,10 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 
+#ifndef BPF_F_NO_PREALLOC
+#define BPF_F_NO_PREALLOC 1
+#endif
+
 struct flow_key {
 	__u8 src_addr[16];
 	__u8 dst_addr[16];
@@ -19,7 +23,8 @@ struct flow_counters {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
-	__uint(max_entries, 65536);
+	__uint(max_entries, 16384);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
 	__type(key, struct flow_key);
 	__type(value, struct flow_counters);
 } clustercost_flows SEC(".maps");
