@@ -1,6 +1,6 @@
 # ClusterCost Kubernetes Agent
 
-`clustercost-agent-k8s` is the open-source Kubernetes cost visibility agent that powers the ClusterCost platform. It runs once per cluster, collects allocation signals (pods, namespaces, nodes, services), correlates usage metrics, and exposes real-time hourly cost estimates via Prometheus metrics and a JSON API for the local dashboard.
+`clustercost-agent-k8s` is the open-source Kubernetes cost visibility agent that powers the ClusterCost platform. It runs as a per-node DaemonSet, collects allocation signals (pods, namespaces, nodes, services), correlates usage metrics and eBPF network data, and exposes real-time hourly cost estimates via Prometheus metrics and a JSON API for the local dashboard.
 
 ## Highlights
 
@@ -147,11 +147,11 @@ CLUSTERCOST_MEMORY_GIB_HOUR_PRICE=0.004 \
 go run ./cmd/agent
 ```
 
-See `examples/kind` and `examples/sample-app` for quick local playgrounds.
+See `examples/daemonset` for a node-level deployment example.
 
 ## Container Image
 
-Build a minimal distroless-based image using the multi-stage `Dockerfile`:
+Build a minimal distroless-based image using the multi-stage `Dockerfile`. The build includes the eBPF object files at `/opt/clustercost/bpf/`:
 
 ```bash
 docker build -t ghcr.io/you/clustercost-agent-k8s:dev .
@@ -159,6 +159,31 @@ docker run --rm -p 8080:8080 \
   -e CLUSTERCOST_CLUSTER_NAME=dev-cluster \
   ghcr.io/you/clustercost-agent-k8s:dev
 ```
+
+Note: eBPF requires Linux with cgroup v2 and BTF; it will not run on macOS.
+
+## Kubernetes DaemonSet
+
+Deploy one agent per node with host mounts and privileges:
+
+```bash
+kubectl apply -f examples/daemonset/agent.yaml
+```
+
+The DaemonSet mounts `/sys/fs/bpf`, `/sys/fs/cgroup`, and `/sys/kernel/btf` and sets:
+
+- `NODE_NAME` for node scoping.
+- `CLUSTERCOST_EBPF_METRICS_*` and `CLUSTERCOST_EBPF_NET_*` for object + map paths.
+- `CLUSTERCOST_NETWORK_ENABLED` and `CLUSTERCOST_EBPF_METRICS_ENABLED` to enable collectors.
+
+### Remote forwarding
+
+Configure the central ingest endpoint and optional auth:
+
+- `CLUSTERCOST_REMOTE_ENABLED=true`
+- `CLUSTERCOST_REMOTE_ENDPOINT=https://<central-agent-host>/ingest`
+- `CLUSTERCOST_REMOTE_AUTH_TOKEN=...` (optional)
+- `CLUSTERCOST_REMOTE_TIMEOUT=5s` (optional)
 
 GitHub Actions builds and publishes multi-architecture (amd64 + arm64) images to Docker Hub via `.github/workflows/docker.yml`. Configure the repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` with push access to your Docker Hub namespace before triggering the workflow.
 

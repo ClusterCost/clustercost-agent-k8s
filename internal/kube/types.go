@@ -20,6 +20,7 @@ type Pod struct {
 	Name       string
 	UID        types.UID
 	NodeName   string
+	PodIP      string
 	Labels     map[string]string
 	OwnerKind  string
 	OwnerName  string
@@ -31,6 +32,7 @@ type Node struct {
 	Name             string
 	ProviderID       string
 	AvailabilityZone string
+	InternalIP       string
 	Labels           map[string]string
 	InstanceType     string
 	CapacityCPU      int64 // milli-cores
@@ -51,6 +53,14 @@ type Namespace struct {
 type PodUsage struct {
 	CPUUsageMilli    int64
 	MemoryUsageBytes int64
+}
+
+// PodNetworkUsage captures per-pod network usage and classification.
+type PodNetworkUsage struct {
+	TxBytes        uint64
+	RxBytes        uint64
+	TxBytesByClass map[string]uint64
+	RxBytesByClass map[string]uint64
 }
 
 // ClusterSnapshot is a point-in-time capture of the cluster state relevant to cost.

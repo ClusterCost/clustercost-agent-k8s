@@ -38,6 +38,7 @@ func (c *NodeCollector) Collect(ctx context.Context, pods []corev1.Pod) ([]kube.
 			Name:             node.Name,
 			ProviderID:       node.Spec.ProviderID,
 			AvailabilityZone: node.Labels["topology.kubernetes.io/zone"],
+			InternalIP:       nodeInternalIP(node.Status.Addresses),
 			Labels:           node.Labels,
 			InstanceType:     resolveInstanceType(node.Labels),
 			CapacityCPU:      node.Status.Capacity.Cpu().MilliValue(),
@@ -74,4 +75,13 @@ func aggregateNodeRequests(pods []corev1.Pod) map[string]nodeRequestTotals {
 		result[pod.Spec.NodeName] = totals
 	}
 	return result
+}
+
+func nodeInternalIP(addresses []corev1.NodeAddress) string {
+	for _, addr := range addresses {
+		if addr.Type == corev1.NodeInternalIP && addr.Address != "" {
+			return addr.Address
+		}
+	}
+	return ""
 }

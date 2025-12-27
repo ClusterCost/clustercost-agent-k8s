@@ -36,6 +36,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/agent/v1/namespaces", h.namespaces)
 	mux.HandleFunc("/agent/v1/nodes", h.nodes)
 	mux.HandleFunc("/agent/v1/resources", h.resources)
+	mux.HandleFunc("/agent/v1/network", h.network)
 }
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
@@ -117,6 +118,18 @@ func (h *Handler) resources(w http.ResponseWriter, r *http.Request) {
 	if snap, ok := h.store.Latest(); ok {
 		payload := map[string]any{
 			"snapshot":  snap.Resources,
+			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
+		}
+		respondJSON(w, http.StatusOK, payload)
+		return
+	}
+	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
+}
+
+func (h *Handler) network(w http.ResponseWriter, r *http.Request) {
+	if snap, ok := h.store.Latest(); ok {
+		payload := map[string]any{
+			"network":   snap.Network,
 			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
 		}
 		respondJSON(w, http.StatusOK, payload)

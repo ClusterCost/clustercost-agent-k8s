@@ -7,8 +7,10 @@ import (
 
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
+	discoveryinformers "k8s.io/client-go/informers/discovery/v1"
 	"k8s.io/client-go/kubernetes"
 	corev1listers "k8s.io/client-go/listers/core/v1"
+	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -18,6 +20,8 @@ type ClusterCache struct {
 	nodeInformer      coreinformers.NodeInformer
 	namespaceInformer coreinformers.NamespaceInformer
 	podInformer       coreinformers.PodInformer
+	serviceInformer   coreinformers.ServiceInformer
+	endpointInformer  discoveryinformers.EndpointSliceInformer
 	synced            []cache.InformerSynced
 }
 
@@ -27,16 +31,22 @@ func NewClusterCache(client kubernetes.Interface, resyncPeriod time.Duration) *C
 	nodeInformer := factory.Core().V1().Nodes()
 	namespaceInformer := factory.Core().V1().Namespaces()
 	podInformer := factory.Core().V1().Pods()
+	serviceInformer := factory.Core().V1().Services()
+	endpointInformer := factory.Discovery().V1().EndpointSlices()
 
 	return &ClusterCache{
 		factory:           factory,
 		nodeInformer:      nodeInformer,
 		namespaceInformer: namespaceInformer,
 		podInformer:       podInformer,
+		serviceInformer:   serviceInformer,
+		endpointInformer:  endpointInformer,
 		synced: []cache.InformerSynced{
 			nodeInformer.Informer().HasSynced,
 			namespaceInformer.Informer().HasSynced,
 			podInformer.Informer().HasSynced,
+			serviceInformer.Informer().HasSynced,
+			endpointInformer.Informer().HasSynced,
 		},
 	}
 }
@@ -64,4 +74,14 @@ func (c *ClusterCache) NamespaceLister() corev1listers.NamespaceLister {
 // PodLister exposes the cached pod lister.
 func (c *ClusterCache) PodLister() corev1listers.PodLister {
 	return c.podInformer.Lister()
+}
+
+// ServiceLister exposes the cached service lister.
+func (c *ClusterCache) ServiceLister() corev1listers.ServiceLister {
+	return c.serviceInformer.Lister()
+}
+
+// EndpointsLister exposes the cached endpoints lister.
+func (c *ClusterCache) EndpointsLister() discoverylisters.EndpointSliceLister {
+	return c.endpointInformer.Lister()
 }

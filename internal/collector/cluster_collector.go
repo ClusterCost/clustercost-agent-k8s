@@ -64,6 +64,7 @@ func (c *ClusterCollector) Collect(ctx context.Context) (kube.ClusterSnapshot, e
 			Name:       pod.Name,
 			UID:        pod.UID,
 			NodeName:   pod.Spec.NodeName,
+			PodIP:      pod.Status.PodIP,
 			Labels:     pod.Labels,
 			OwnerKind:  controllerKind(&pod),
 			OwnerName:  controllerName(&pod),

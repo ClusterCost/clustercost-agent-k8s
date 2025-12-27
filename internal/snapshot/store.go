@@ -31,3 +31,10 @@ func (s *Store) Latest() (Snapshot, bool) {
 	}
 	return s.snapshot, true
 }
+
+// LatestSnapshot returns the snapshot without the readiness flag.
+func (s *Store) LatestSnapshot() Snapshot {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.snapshot
+}
