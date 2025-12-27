@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"clustercost-agent-k8s/internal/config"
 
@@ -64,6 +65,9 @@ func (m *Manager) loadMetrics(cfg config.MetricsConfig) error {
 	m.objs = append(m.objs, collection)
 	if cfg.BPFMapPath != "" {
 		if mp := collection.Maps["clustercost_metrics"]; mp != nil {
+			if err := os.MkdirAll(filepath.Dir(cfg.BPFMapPath), 0o755); err != nil {
+				return fmt.Errorf("create metrics map dir: %w", err)
+			}
 			if _, err := os.Stat(cfg.BPFMapPath); err == nil {
 				_ = os.Remove(cfg.BPFMapPath)
 			}
@@ -125,6 +129,9 @@ func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {
 	m.objs = append(m.objs, collection)
 	if cfg.BPFMapPath != "" {
 		if mp := collection.Maps["clustercost_flows"]; mp != nil {
+			if err := os.MkdirAll(filepath.Dir(cfg.BPFMapPath), 0o755); err != nil {
+				return fmt.Errorf("create network map dir: %w", err)
+			}
 			if _, err := os.Stat(cfg.BPFMapPath); err == nil {
 				_ = os.Remove(cfg.BPFMapPath)
 			}
