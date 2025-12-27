@@ -12,7 +12,7 @@ struct flow_key {
 	__u8 pad[2];
 };
 
-struct flow_stats {
+struct flow_counters {
 	__u64 tx_bytes;
 	__u64 rx_bytes;
 };
@@ -21,7 +21,7 @@ struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
 	__uint(max_entries, 65536);
 	__type(key, struct flow_key);
-	__type(value, struct flow_stats);
+	__type(value, struct flow_counters);
 } clustercost_flows SEC(".maps");
 
 static __always_inline void fill_ipv4(__u8 dst[16], __u32 addr) {
@@ -37,10 +37,10 @@ static __always_inline void fill_ipv6(__u8 dst[16], const __u8 *src) {
 
 static __always_inline int handle_skb(struct __sk_buff *skb, bool egress) {
 	struct flow_key key = {};
-	struct flow_stats *stats;
+	struct flow_counters *stats;
 
 	__u16 proto = bpf_ntohs(skb->protocol);
-	if (proto == ETH_P_IP) {
+	if (proto == 0x0800) {
 		struct iphdr iph;
 		if (bpf_skb_load_bytes(skb, 0, &iph, sizeof(iph)) < 0) {
 			return 1;
@@ -49,7 +49,7 @@ static __always_inline int handle_skb(struct __sk_buff *skb, bool egress) {
 		key.proto = iph.protocol;
 		fill_ipv4(key.src_addr, iph.saddr);
 		fill_ipv4(key.dst_addr, iph.daddr);
-	} else if (proto == ETH_P_IPV6) {
+	} else if (proto == 0x86DD) {
 		struct ipv6hdr iph6;
 		if (bpf_skb_load_bytes(skb, 0, &iph6, sizeof(iph6)) < 0) {
 			return 1;
@@ -64,7 +64,7 @@ static __always_inline int handle_skb(struct __sk_buff *skb, bool egress) {
 
 	stats = bpf_map_lookup_elem(&clustercost_flows, &key);
 	if (!stats) {
-		struct flow_stats zero = {};
+		struct flow_counters zero = {};
 		bpf_map_update_elem(&clustercost_flows, &key, &zero, BPF_ANY);
 		stats = bpf_map_lookup_elem(&clustercost_flows, &key);
 		if (!stats) {

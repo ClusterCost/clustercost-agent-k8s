@@ -3,20 +3,67 @@ name: Manual Release
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Semver tag for the release (e.g., v0.2.0)"
+      bump:
+        description: "Version bump type"
         required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+          - custom
+      custom_version:
+        description: "Custom semver tag (e.g., v0.2.0). Required when bump=custom."
+        required: false
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Compute release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          bump="${{ inputs.bump }}"
+          custom="${{ inputs.custom_version }}"
+
+          if [[ "$bump" == "custom" ]]; then
+            if [[ -z "$custom" ]]; then
+              echo "custom_version is required when bump=custom" >&2
+              exit 1
+            fi
+            if [[ ! "$custom" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "custom_version must be semver like v0.2.0" >&2
+              exit 1
+            fi
+            version="$custom"
+          else
+            git fetch --tags --force
+            latest=$(git tag -l "v[0-9]*.[0-9]*.[0-9]*" | sort -V | tail -n 1)
+            if [[ -z "$latest" ]]; then
+              latest="v0.0.0"
+            fi
+            base="${latest#v}"
+            IFS='.' read -r major minor patch <<< "$base"
+            case "$bump" in
+              patch) patch=$((patch + 1)) ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+            esac
+            version="v${major}.${minor}.${patch}"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -34,6 +81,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ inputs.version }}
-          name: ClusterCost Agent ${{ inputs.version }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ClusterCost Agent ${{ steps.version.outputs.version }}
           generate_release_notes: true
+
+  docker:
+    needs: release
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag: ${{ needs.release.outputs.version }}
+    secrets: inherit
