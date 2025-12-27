@@ -17,10 +17,9 @@ WORKDIR /bpf
 COPY bpf/ /bpf/
 RUN if [ "${TARGETARCH}" = "amd64" ]; then ARCH=x86; elif [ "${TARGETARCH}" = "arm64" ]; then ARCH=arm64; else ARCH=${TARGETARCH}; fi; make ARCH=${ARCH} all
 
-FROM gcr.io/distroless/static:nonroot
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /out/clustercost-agent /clustercost-agent
 COPY --from=bpf-builder /bpf/flows.bpf.o /opt/clustercost/bpf/flows.bpf.o
 COPY --from=bpf-builder /bpf/metrics.bpf.o /opt/clustercost/bpf/metrics.bpf.o
-
-USER nonroot
 ENTRYPOINT ["/clustercost-agent"]
