@@ -15,7 +15,10 @@ metadata:
   name: clustercost-agent
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes", "namespaces", "services", "endpoints"]
+    resources: ["pods", "nodes", "namespaces", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: ["endpointslices"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods"]
@@ -33,6 +36,14 @@ subjects:
   - kind: ServiceAccount
     name: clustercost-agent
     namespace: clustercost
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clustercost-remote
+  namespace: clustercost
+stringData:
+  token: "replace-me"
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -62,6 +73,18 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: CLUSTERCOST_CLUSTER_NAME
+              value: "my-cluster"
+            - name: CLUSTERCOST_PROVIDER
+              value: "aws"
+            - name: CLUSTERCOST_REGION
+              value: "us-east-1"
+            - name: CLUSTERCOST_SCRAPE_INTERVAL
+              value: "30s"
+            - name: CLUSTERCOST_LISTEN_ADDR
+              value: ":8080"
+            - name: CLUSTERCOST_LOG_LEVEL
+              value: "info"
             - name: CLUSTERCOST_EBPF_METRICS_ENABLED
               value: "true"
             - name: CLUSTERCOST_NETWORK_ENABLED
@@ -80,6 +103,35 @@ spec:
               value: "/sys/fs/cgroup"
             - name: CLUSTERCOST_CGROUP_ROOT
               value: "/sys/fs/cgroup"
+            - name: CLUSTERCOST_NETWORK_EGRESS_GIB_PRICE
+              value: "0.09"
+            - name: CLUSTERCOST_REMOTE_ENABLED
+              value: "true"
+            - name: CLUSTERCOST_REMOTE_ENDPOINT
+              value: "https://central-agent.example.com/agent/v1/report"
+            - name: CLUSTERCOST_REMOTE_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: clustercost-remote
+                  key: token
+            - name: CLUSTERCOST_REMOTE_TIMEOUT
+              value: "10s"
+            - name: CLUSTERCOST_REMOTE_QUEUE_DIR
+              value: "/var/lib/clustercost/queue"
+            - name: CLUSTERCOST_REMOTE_FLUSH_EVERY
+              value: "15s"
+            - name: CLUSTERCOST_REMOTE_MAX_BATCH
+              value: "200"
+            - name: CLUSTERCOST_REMOTE_MAX_RETRIES
+              value: "8"
+            - name: CLUSTERCOST_REMOTE_BACKOFF
+              value: "1s"
+            - name: CLUSTERCOST_REMOTE_MAX_BATCH_BYTES
+              value: "1048576"
+            - name: CLUSTERCOST_REMOTE_MEMORY_BUFFER
+              value: "5"
+            - name: CLUSTERCOST_REMOTE_GZIP
+              value: "true"
           volumeMounts:
             - name: bpf
               mountPath: /sys/fs/bpf
@@ -89,6 +141,8 @@ spec:
             - name: btf
               mountPath: /sys/kernel/btf
               readOnly: true
+            - name: queue
+              mountPath: /var/lib/clustercost/queue
           ports:
             - name: http
               containerPort: 8080
@@ -121,6 +175,8 @@ spec:
         - name: btf
           hostPath:
             path: /sys/kernel/btf
+        - name: queue
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

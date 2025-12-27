@@ -48,6 +48,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ inputs.tag }}
+            type=raw,value=latest
           flavor: |
             suffix=-${{ matrix.arch }}
 
@@ -91,6 +92,7 @@ jobs:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=${{ inputs.tag }}
+            type=raw,value=latest
 
       - name: Create multi-arch manifests
         run: |
