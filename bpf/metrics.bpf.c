@@ -5,6 +5,10 @@
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_tracing.h>
 
+#ifndef BPF_F_NO_PREALLOC
+#define BPF_F_NO_PREALLOC 1
+#endif
+
 struct metric_key {
 	__u64 cgroup_id;
 };
@@ -21,14 +25,16 @@ struct cpu_state {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH);
-	__uint(max_entries, 65536);
+	__uint(max_entries, 16384);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
 	__type(key, struct metric_key);
 	__type(value, struct metric_stats);
 } clustercost_metrics SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__uint(max_entries, 131072);
+	__uint(max_entries, 16384);
+	__uint(map_flags, BPF_F_NO_PREALLOC);
 	__type(key, __u32);
 	__type(value, __u64);
 } pid_start SEC(".maps");

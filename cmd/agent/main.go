@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cilium/ebpf/rlimit"
+
 	"clustercost-agent-k8s/internal/api"
 	"clustercost-agent-k8s/internal/collector"
 	"clustercost-agent-k8s/internal/config"
@@ -26,6 +28,10 @@ import (
 )
 
 func main() {
+	if err := rlimit.RemoveMemlock(); err != nil {
+		slog.Warn("failed to remove memlock limit", slog.String("error", err.Error()))
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		panic(err)
