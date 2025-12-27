@@ -11,10 +11,11 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags "-s -w -X clustercost-agent-k8s/internal/version.Version=${VERSION}" -o /out/clustercost-agent ./cmd/agent
 
 FROM debian:bookworm AS bpf-builder
-RUN apt-get update && apt-get install -y --no-install-recommends clang llvm bpftool make && rm -rf /var/lib/apt/lists/*
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends clang llvm bpftool make libbpf-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /bpf
 COPY bpf/ /bpf/
-RUN make
+RUN if [ "${TARGETARCH}" = "amd64" ]; then ARCH=x86; elif [ "${TARGETARCH}" = "arm64" ]; then ARCH=arm64; else ARCH=${TARGETARCH}; fi; make ARCH=${ARCH} all
 
 FROM gcr.io/distroless/static:nonroot
 COPY --from=builder /out/clustercost-agent /clustercost-agent
