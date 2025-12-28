@@ -2,6 +2,7 @@ package ebpf
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -27,10 +28,10 @@ func (r PreflightReport) HasErrors() bool {
 }
 
 // Preflight validates the runtime prerequisites for eBPF collection.
-func Preflight(cfg config.Config) PreflightReport {
+func Preflight(cfg config.Config, logger *slog.Logger) PreflightReport {
 	report := PreflightReport{}
 
-	if err := mountBPFFS(); err != nil {
+	if err := mountBPFFS(logger); err != nil {
 		report.Issues = append(report.Issues, PreflightIssue{
 			Component: "bpffs",
 			Message:   fmt.Sprintf("failed to mount bpffs: %v", err),
@@ -92,7 +93,8 @@ func checkPinDirWritable(report *PreflightReport, label, pinPath string) {
 		return
 	}
 
-	tmp, err := os.CreateTemp(dir, ".clustercost-ebpf-*")
+	// CRITICAL: If this is on BPFFS, we cannot create regular files. We must use MkdirTemp.
+	tmpDir, err := os.MkdirTemp(dir, ".clustercost-ebpf-check-")
 	if err != nil {
 		report.Issues = append(report.Issues, PreflightIssue{
 			Component: label,
@@ -100,11 +102,10 @@ func checkPinDirWritable(report *PreflightReport, label, pinPath string) {
 		})
 		return
 	}
-	if err := tmp.Close(); err != nil {
+	if err := os.Remove(tmpDir); err != nil {
 		report.Issues = append(report.Issues, PreflightIssue{
 			Component: label,
-			Message:   fmt.Sprintf("pin dir temp close failed: %s: %v", dir, err),
+			Message:   fmt.Sprintf("pin dir remove failed: %s: %v", tmpDir, err),
 		})
 	}
-	_ = os.Remove(tmp.Name())
 }

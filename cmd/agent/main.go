@@ -122,7 +122,7 @@ func main() {
 	}
 
 	if cfg.Metrics.Enabled || cfg.Network.Enabled {
-		report := ebpf.Preflight(cfg)
+		report := ebpf.Preflight(cfg, logger)
 		if report.HasErrors() {
 			for _, issue := range report.Issues {
 				logger.Error("eBPF preflight failed", slog.String("component", issue.Component), slog.String("error", issue.Message))

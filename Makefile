@@ -20,6 +20,9 @@ lint:
 test:
 	go test ./...
 
+test-bpf:
+	docker run --privileged --rm -v $(PWD):/app -w /app golang:1.24 go test -v ./internal/ebpf/ -run TestMountBPFFS
+
 tidy:
 	go mod tidy
 
