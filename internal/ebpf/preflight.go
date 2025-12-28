@@ -30,6 +30,13 @@ func (r PreflightReport) HasErrors() bool {
 func Preflight(cfg config.Config) PreflightReport {
 	report := PreflightReport{}
 
+	if err := mountBPFFS(); err != nil {
+		report.Issues = append(report.Issues, PreflightIssue{
+			Component: "bpffs",
+			Message:   fmt.Sprintf("failed to mount bpffs: %v", err),
+		})
+	}
+
 	if err := rlimit.RemoveMemlock(); err != nil {
 		report.Issues = append(report.Issues, PreflightIssue{
 			Component: "memlock",

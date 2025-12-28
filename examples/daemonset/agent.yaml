@@ -142,6 +142,7 @@ spec:
           volumeMounts:
             - name: bpf
               mountPath: /sys/fs/bpf
+              mountPropagation: Bidirectional
             - name: cgroup
               mountPath: /sys/fs/cgroup
               readOnly: true
