@@ -12,7 +12,7 @@ func mountBPFFS() error {
 	const bpfPath = "/sys/fs/bpf"
 
 	// Check if directory exists, create if not
-	if err := os.MkdirAll(bpfPath, 0o755); err != nil {
+	if err := os.MkdirAll(bpfPath, 0o750); err != nil {
 		return fmt.Errorf("create bpf mount point: %w", err)
 	}
 
