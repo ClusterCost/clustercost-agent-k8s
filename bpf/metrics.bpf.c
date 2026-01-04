@@ -9,6 +9,39 @@
 #define BPF_F_NO_PREALLOC 1
 #endif
 
+
+struct trace_entry {
+	short unsigned int type;
+	unsigned char flags;
+	unsigned char preempt_count;
+	int pid;
+};
+
+struct trace_event_raw_sched_switch {
+	struct trace_entry ent;
+	char prev_comm[16];
+	int prev_pid;
+	int prev_prio;
+	long int prev_state;
+	char next_comm[16];
+	int next_pid;
+	int next_prio;
+};
+
+struct trace_event_raw_mm_page_alloc {
+	struct trace_entry ent;
+	unsigned long pfn;
+	unsigned int order;
+	unsigned int gfp_flags;
+	int migratetype;
+};
+
+struct trace_event_raw_mm_page_free {
+	struct trace_entry ent;
+	unsigned long pfn;
+	unsigned int order;
+};
+
 struct metric_key {
 	__u64 cgroup_id;
 };

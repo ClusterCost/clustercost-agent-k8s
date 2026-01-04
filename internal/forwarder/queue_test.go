@@ -28,7 +28,7 @@ func TestQueueMemorySpill(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(dir, 50, 3, time.Second, time.Second, 1024, 1, sender, noopLogger())
 
 	if err := queue.Enqueue(AgentReport{ClusterID: "c1"}); err != nil {
@@ -83,7 +83,7 @@ func TestQueueFlushMemorySendsBatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(t.TempDir(), 10, 3, time.Second, time.Second, 10*1024, 10, sender, noopLogger())
 
 	reportA := AgentReport{ClusterID: "a"}
@@ -108,7 +108,7 @@ func TestQueueDiskBatchRespectsBatchBytes(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(dir, 10, 3, time.Millisecond, time.Second, 120, 0, sender, noopLogger())
 
 	report := AgentReport{ClusterID: strings.Repeat("x", 80)}

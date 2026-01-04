@@ -156,13 +156,35 @@ func main() {
 		Enabled:    cfg.Network.Enabled,
 		BPFMapPath: cfg.Network.BPFMapPath,
 	}, logger)
-	var sender *forwarder.Sender
+	var sender forwarder.Forwarder
 	var queue *forwarder.Queue
 	if cfg.Remote.Enabled && cfg.Remote.EndpointURL != "" {
-		sender = forwarder.NewSender(cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout, cfg.Remote.GzipEnabled)
-		queue = forwarder.NewQueue(cfg.Remote.QueueDir, cfg.Remote.MaxBatch, cfg.Remote.MaxRetries, cfg.Remote.Backoff, cfg.Remote.FlushEvery, cfg.Remote.MaxBatchBytes, cfg.Remote.MemoryBuffer, sender, logger)
-		logger.Info("remote forwarding enabled", slog.String("endpoint", cfg.Remote.EndpointURL))
-		go queue.Run(ctx)
+		if cfg.Remote.Protocol == "grpc" {
+			var err error
+			sender, err = forwarder.NewGRPCSender(ctx, cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout)
+			if err != nil {
+				logger.Error("failed to create grpc sender", slog.String("error", err.Error()))
+				// We don't exit here, queue will just retry until sender works?
+				// Actually if NewGRPCSender fails (dial fails), we might want to retry or just log.
+				// However, NewGRPCSender with grpc.NewClient is non-blocking usually, so it shouldn't fail unless config invalid.
+			} else {
+				// Ensure we close the connection on shutdown
+				go func() {
+					<-ctx.Done()
+					if err := sender.Close(); err != nil {
+						logger.Warn("failed to close grpc sender", slog.String("error", err.Error()))
+					}
+				}()
+			}
+		} else {
+			sender = forwarder.NewHTTPSender(cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout, cfg.Remote.GzipEnabled)
+		}
+
+		if sender != nil {
+			queue = forwarder.NewQueue(cfg.Remote.QueueDir, cfg.Remote.MaxBatch, cfg.Remote.MaxRetries, cfg.Remote.Backoff, cfg.Remote.FlushEvery, cfg.Remote.MaxBatchBytes, cfg.Remote.MemoryBuffer, sender, logger)
+			logger.Info("remote forwarding enabled", slog.String("endpoint", cfg.Remote.EndpointURL), slog.String("protocol", cfg.Remote.Protocol))
+			go queue.Run(ctx)
+		}
 	}
 	classifier := snapshot.NewEnvironmentClassifier(snapshot.ClassifierConfig{
 		LabelKeys:              cfg.Environment.LabelKeys,

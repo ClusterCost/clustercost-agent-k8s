@@ -26,7 +26,7 @@ type Queue struct {
 	flushEvery    time.Duration
 	maxBatchBytes int64
 	memoryBuffer  int
-	sender        *Sender
+	sender        Forwarder
 	logger        *slog.Logger
 	mu            sync.Mutex
 	mem           []queuedReport
@@ -35,7 +35,7 @@ type Queue struct {
 }
 
 // NewQueue returns a configured Queue.
-func NewQueue(dir string, maxBatch, maxRetries int, backoff, flushEvery time.Duration, maxBatchBytes int64, memoryBuffer int, sender *Sender, logger *slog.Logger) *Queue {
+func NewQueue(dir string, maxBatch, maxRetries int, backoff, flushEvery time.Duration, maxBatchBytes int64, memoryBuffer int, sender Forwarder, logger *slog.Logger) *Queue {
 	if maxBatch <= 0 {
 		maxBatch = 50
 	}

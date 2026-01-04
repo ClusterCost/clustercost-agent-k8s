@@ -30,7 +30,7 @@ func TestSenderSend(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := NewSender(server.URL, "token-123", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "token-123", 2*time.Second, false)
 	report := AgentReport{
 		ClusterID:   "cluster-1",
 		ClusterName: "prod",
@@ -62,7 +62,7 @@ func TestSenderSendBatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	sender := NewSender(server.URL, "", 2*time.Second, true)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, true)
 	reports := []AgentReport{
 		{ClusterID: "cluster-1", NodeName: "node-a"},
 		{ClusterID: "cluster-1", NodeName: "node-b"},

@@ -117,7 +117,7 @@ spec:
             - name: CLUSTERCOST_REMOTE_ENABLED
               value: "true"
             - name: CLUSTERCOST_REMOTE_ENDPOINT
-              value: "http://clustercost-dashboard.clustercost.svc.cluster.local:9090/agent/v1/report"
+              value: "clustercost-dashboard.clustercost.svc.cluster.local:9091"
             - name: CLUSTERCOST_REMOTE_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:

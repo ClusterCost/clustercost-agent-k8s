@@ -34,5 +34,8 @@ generate-pricing-all:
 	go run ./hack/cmd/generate-pricing -regions "$(REGIONS)" -all-instance-types -output internal/config/aws_prices_gen.go
 	gofmt -w internal/config/aws_prices_gen.go
 
+generate-proto:
+	protoc -I=proto --go_out=internal/proto/agent/v1 --go_opt=paths=source_relative --go-grpc_out=internal/proto/agent/v1 --go-grpc_opt=paths=source_relative proto/agent.proto
+
 upload-latest:
 	docker buildx build --platform linux/amd64,linux/arm64 -t jesuspaz/clustercost-agent-k8s:latest --push --build-arg VERSION=$(VERSION) .

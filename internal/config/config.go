@@ -84,6 +84,7 @@ type RemoteConfig struct {
 	MaxBatchBytes int64         `yaml:"maxBatchBytes"`
 	MemoryBuffer  int           `yaml:"memoryBuffer"`
 	GzipEnabled   bool          `yaml:"gzipEnabled"`
+	Protocol      string        `yaml:"protocol"` // "http" or "grpc"
 }
 
 // EnvironmentConfig holds heuristics for namespace classification.
@@ -146,6 +147,7 @@ func DefaultConfig() Config {
 			MaxBatchBytes: 512 * 1024,
 			MemoryBuffer:  200,
 			GzipEnabled:   true,
+			Protocol:      "grpc",
 		},
 		Environment: EnvironmentConfig{
 			LabelKeys: []string{"clustercost.io/environment"},
@@ -223,6 +225,7 @@ func Load() (Config, error) {
 	fs.Int64Var(&cfg.Remote.MaxBatchBytes, "remote-max-batch-bytes", cfg.Remote.MaxBatchBytes, "Max payload size per batch in bytes")
 	fs.IntVar(&cfg.Remote.MemoryBuffer, "remote-memory-buffer", cfg.Remote.MemoryBuffer, "In-memory buffer size before spooling to disk")
 	fs.BoolVar(&cfg.Remote.GzipEnabled, "remote-gzip", cfg.Remote.GzipEnabled, "Enable gzip compression for batches")
+	fs.StringVar(&cfg.Remote.Protocol, "remote-protocol", cfg.Remote.Protocol, "Remote protocol (http or grpc)")
 
 	if err := fs.Parse(os.Args[1:]); err != nil { // flag set already prints errors
 		return Config{}, err
@@ -500,6 +503,9 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Remote.GzipEnabled = bv
 		}
 	}
+	if v := os.Getenv("CLUSTERCOST_REMOTE_PROTOCOL"); v != "" {
+		cfg.Remote.Protocol = v
+	}
 }
 
 func envOrDefault(key, def string) string {
@@ -653,5 +659,8 @@ func mergeRemoteConfig(base *RemoteConfig, override RemoteConfig) {
 	}
 	if override.GzipEnabled {
 		base.GzipEnabled = override.GzipEnabled
+	}
+	if override.Protocol != "" {
+		base.Protocol = override.Protocol
 	}
 }
