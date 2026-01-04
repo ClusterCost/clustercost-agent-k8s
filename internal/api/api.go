@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"clustercost-agent-k8s/internal/forwarder"
 	"clustercost-agent-k8s/internal/snapshot"
 )
 
@@ -37,6 +38,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/agent/v1/nodes", h.nodes)
 	mux.HandleFunc("/agent/v1/resources", h.resources)
 	mux.HandleFunc("/agent/v1/network", h.network)
+	mux.HandleFunc("/api/debug/report", h.debugReport)
 }
 
 func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
@@ -136,6 +138,25 @@ func (h *Handler) network(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
+}
+
+func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
+	snap, ok := h.store.Latest()
+	if !ok {
+		respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
+		return
+	}
+
+	report := forwarder.AgentReport{
+		ClusterID:   snap.Resources.ClusterID,
+		ClusterName: h.clusterName,
+		NodeName:    "debug-manual-pull",
+		Version:     h.version,
+		Timestamp:   time.Now().UTC(),
+		Snapshot:    snap,
+	}
+
+	respondJSON(w, http.StatusOK, report)
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {

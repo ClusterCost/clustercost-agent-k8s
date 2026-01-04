@@ -87,30 +87,40 @@ func (m *Manager) loadMetrics(cfg config.MetricsConfig) error {
 
 	schedProg := collection.Programs["handle_sched_switch"]
 	if schedProg == nil {
-		return fmt.Errorf("missing metrics program handle_sched_switch")
+		m.logger.Warn("missing metrics program handle_sched_switch; cpu metrics will be unavailable")
+	} else {
+		linkSched, err := link.Tracepoint("sched", "sched_switch", schedProg, nil)
+		if err != nil {
+			m.logger.Warn("optional tracepoint not found; cpu metrics will be unavailable",
+				slog.String("tracepoint", "sched_switch"),
+				slog.String("error", err.Error()))
+		} else {
+			m.links = append(m.links, linkSched)
+		}
 	}
-	linkSched, err := link.Tracepoint("sched", "sched_switch", schedProg, nil)
-	if err != nil {
-		return fmt.Errorf("attach sched_switch: %w", err)
-	}
-	m.links = append(m.links, linkSched)
 
 	allocProg := collection.Programs["handle_mm_page_alloc"]
 	if allocProg != nil {
 		linkAlloc, err := link.Tracepoint("mm", "mm_page_alloc", allocProg, nil)
 		if err != nil {
-			return fmt.Errorf("attach mm_page_alloc: %w", err)
+			m.logger.Warn("optional tracepoint not found; memory metrics may be incomplete",
+				slog.String("tracepoint", "mm_page_alloc"),
+				slog.String("error", err.Error()))
+		} else {
+			m.links = append(m.links, linkAlloc)
 		}
-		m.links = append(m.links, linkAlloc)
 	}
 
 	freeProg := collection.Programs["handle_mm_page_free"]
 	if freeProg != nil {
 		linkFree, err := link.Tracepoint("mm", "mm_page_free", freeProg, nil)
 		if err != nil {
-			return fmt.Errorf("attach mm_page_free: %w", err)
+			m.logger.Warn("optional tracepoint not found; memory metrics may be incomplete",
+				slog.String("tracepoint", "mm_page_free"),
+				slog.String("error", err.Error()))
+		} else {
+			m.links = append(m.links, linkFree)
 		}
-		m.links = append(m.links, linkFree)
 	}
 
 	m.logger.Info("loaded eBPF metrics programs", slog.String("object", cfg.ObjectPath))
@@ -147,7 +157,8 @@ func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {
 	}
 	cgroup, err := os.Open(cgroupPath) // #nosec G304 -- path is provided by operator configuration
 	if err != nil {
-		return fmt.Errorf("open cgroup path: %w", err)
+		m.logger.Warn("open cgroup path failed; network metrics unavailable", slog.String("error", err.Error()))
+		return nil // Don't crash, just skip network
 	}
 	defer func() {
 		if err := cgroup.Close(); err != nil {
@@ -157,31 +168,37 @@ func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {
 
 	ingressProg := collection.Programs["handle_cgroup_ingress"]
 	if ingressProg == nil {
-		return fmt.Errorf("missing network program handle_cgroup_ingress")
+		m.logger.Warn("missing network program handle_cgroup_ingress")
+	} else {
+		linkIngress, err := link.AttachCgroup(link.CgroupOptions{
+			Path:    cgroupPath,
+			Attach:  ebpf.AttachCGroupInetIngress,
+			Program: ingressProg,
+		})
+		if err != nil {
+			m.logger.Warn("attach cgroup ingress failed; network metrics may be incomplete",
+				slog.String("error", err.Error()))
+		} else {
+			m.links = append(m.links, linkIngress)
+		}
 	}
-	linkIngress, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    cgroupPath,
-		Attach:  ebpf.AttachCGroupInetIngress,
-		Program: ingressProg,
-	})
-	if err != nil {
-		return fmt.Errorf("attach cgroup ingress: %w", err)
-	}
-	m.links = append(m.links, linkIngress)
 
 	egressProg := collection.Programs["handle_cgroup_egress"]
 	if egressProg == nil {
-		return fmt.Errorf("missing network program handle_cgroup_egress")
+		m.logger.Warn("missing network program handle_cgroup_egress")
+	} else {
+		linkEgress, err := link.AttachCgroup(link.CgroupOptions{
+			Path:    cgroupPath,
+			Attach:  ebpf.AttachCGroupInetEgress,
+			Program: egressProg,
+		})
+		if err != nil {
+			m.logger.Warn("attach cgroup egress failed; network metrics may be incomplete",
+				slog.String("error", err.Error()))
+		} else {
+			m.links = append(m.links, linkEgress)
+		}
 	}
-	linkEgress, err := link.AttachCgroup(link.CgroupOptions{
-		Path:    cgroupPath,
-		Attach:  ebpf.AttachCGroupInetEgress,
-		Program: egressProg,
-	})
-	if err != nil {
-		return fmt.Errorf("attach cgroup egress: %w", err)
-	}
-	m.links = append(m.links, linkEgress)
 
 	m.logger.Info("loaded eBPF network programs", slog.String("object", cfg.ObjectPath))
 	return nil

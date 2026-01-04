@@ -17,22 +17,24 @@ import (
 
 // Builder converts informer/lister state into the public snapshot model.
 type Builder struct {
-	clusterID  string
-	classifier *EnvironmentClassifier
-	prices     *NodePriceLookup
-	netPrices  *NetworkPriceLookup
+	clusterID       string
+	classifier      *EnvironmentClassifier
+	prices          *NodePriceLookup
+	netPrices       *NetworkPriceLookup
+	detailedNetwork bool
 }
 
 // NewBuilder returns a configured Builder.
-func NewBuilder(clusterID string, classifier *EnvironmentClassifier, prices *NodePriceLookup, netPrices *NetworkPriceLookup) *Builder {
+func NewBuilder(clusterID string, classifier *EnvironmentClassifier, prices *NodePriceLookup, netPrices *NetworkPriceLookup, detailedNetwork bool) *Builder {
 	if netPrices == nil {
 		netPrices = NewNetworkPriceLookup(0, nil)
 	}
 	return &Builder{
-		clusterID:  clusterID,
-		classifier: classifier,
-		prices:     prices,
-		netPrices:  netPrices,
+		clusterID:       clusterID,
+		classifier:      classifier,
+		prices:          prices,
+		netPrices:       netPrices,
+		detailedNetwork: detailedNetwork,
 	}
 }
 
@@ -194,63 +196,70 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 		return nodesOut[i].NodeName < nodesOut[j].NodeName
 	})
 
-	podConnections := map[connectionKey]*NetworkConnection{}
-	workloadConnections := map[connectionKey]*NetworkConnection{}
-	namespaceConnections := map[connectionKey]*NetworkConnection{}
-	serviceConnections := map[connectionKey]*NetworkConnection{}
+	var podConnections map[connectionKey]*NetworkConnection
+	var workloadConnections map[connectionKey]*NetworkConnection
+	var namespaceConnections map[connectionKey]*NetworkConnection
+	var serviceConnections map[connectionKey]*NetworkConnection
 
-	for _, flow := range networkCollection.Flows {
-		srcPod := podByIP[flow.SrcIP]
-		if srcPod == nil {
-			continue
-		}
-		srcKey := fmt.Sprintf("%s/%s", srcPod.Namespace, srcPod.Name)
-		srcInfo := podInfoByIP[flow.SrcIP]
-		dstPod := podByIP[flow.DstIP]
-		class := network.ClassifyEgress(srcInfo, flow.DstIP, podInfoByIP)
-		cost := b.netPrices.EgressCost(class, flow.TxBytes)
+	if b.detailedNetwork {
+		podConnections = make(map[connectionKey]*NetworkConnection)
+		workloadConnections = make(map[connectionKey]*NetworkConnection)
+		namespaceConnections = make(map[connectionKey]*NetworkConnection)
+		serviceConnections = make(map[connectionKey]*NetworkConnection)
 
-		srcPodEndpoint := NetworkEndpoint{Kind: "pod", Namespace: srcPod.Namespace, Name: srcPod.Name}
-		srcNsEndpoint := NetworkEndpoint{Kind: "namespace", Name: srcPod.Namespace}
-		srcWorkloadEndpoint := podWorkloads[srcKey]
-		if srcWorkloadEndpoint.Kind == "" {
-			srcWorkloadEndpoint = NetworkEndpoint{Kind: "workload", Namespace: srcPod.Namespace, Name: srcPod.Name}
-		}
-
-		var dstPodEndpoint NetworkEndpoint
-		var dstNsEndpoint NetworkEndpoint
-		var dstWorkloadEndpoint NetworkEndpoint
-		var dstServiceEndpoints []NetworkEndpoint
-
-		if dstPod != nil {
-			dstPodEndpoint = NetworkEndpoint{Kind: "pod", Namespace: dstPod.Namespace, Name: dstPod.Name}
-			dstNsEndpoint = NetworkEndpoint{Kind: "namespace", Name: dstPod.Namespace}
-			dstWorkloadEndpoint = podWorkloads[fmt.Sprintf("%s/%s", dstPod.Namespace, dstPod.Name)]
-			if dstWorkloadEndpoint.Kind == "" {
-				dstWorkloadEndpoint = NetworkEndpoint{Kind: "workload", Namespace: dstPod.Namespace, Name: dstPod.Name}
+		for _, flow := range networkCollection.Flows {
+			srcPod := podByIP[flow.SrcIP]
+			if srcPod == nil {
+				continue
 			}
-			dstServiceEndpoints = servicesForIP(flow.DstIP, serviceByIP, serviceIndex)
-		} else {
-			dstPodEndpoint = NetworkEndpoint{Kind: "external", Name: class}
-			dstNsEndpoint = NetworkEndpoint{Kind: "external", Name: class}
-			dstWorkloadEndpoint = NetworkEndpoint{Kind: "external", Name: class}
-		}
+			srcKey := fmt.Sprintf("%s/%s", srcPod.Namespace, srcPod.Name)
+			srcInfo := podInfoByIP[flow.SrcIP]
+			dstPod := podByIP[flow.DstIP]
+			class := network.ClassifyEgress(srcInfo, flow.DstIP, podInfoByIP)
+			cost := b.netPrices.EgressCost(class, flow.TxBytes)
 
-		accumulateConnection(podConnections, srcPodEndpoint, dstPodEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
-		accumulateConnection(namespaceConnections, srcNsEndpoint, dstNsEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
-		accumulateConnection(workloadConnections, srcWorkloadEndpoint, dstWorkloadEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
+			srcPodEndpoint := NetworkEndpoint{Kind: "pod", Namespace: srcPod.Namespace, Name: srcPod.Name}
+			srcNsEndpoint := NetworkEndpoint{Kind: "namespace", Name: srcPod.Namespace}
+			srcWorkloadEndpoint := podWorkloads[srcKey]
+			if srcWorkloadEndpoint.Kind == "" {
+				srcWorkloadEndpoint = NetworkEndpoint{Kind: "workload", Namespace: srcPod.Namespace, Name: srcPod.Name}
+			}
 
-		srcServiceEndpoints := servicesForIP(flow.SrcIP, serviceByIP, serviceIndex)
-		if len(srcServiceEndpoints) > 0 && len(dstServiceEndpoints) > 0 {
-			for _, srcSvc := range srcServiceEndpoints {
-				for _, dstSvc := range dstServiceEndpoints {
-					accumulateConnection(serviceConnections, srcSvc, dstSvc, class, flow.TxBytes, flow.RxBytes, cost)
+			var dstPodEndpoint NetworkEndpoint
+			var dstNsEndpoint NetworkEndpoint
+			var dstWorkloadEndpoint NetworkEndpoint
+			var dstServiceEndpoints []NetworkEndpoint
+
+			if dstPod != nil {
+				dstPodEndpoint = NetworkEndpoint{Kind: "pod", Namespace: dstPod.Namespace, Name: dstPod.Name}
+				dstNsEndpoint = NetworkEndpoint{Kind: "namespace", Name: dstPod.Namespace}
+				dstWorkloadEndpoint = podWorkloads[fmt.Sprintf("%s/%s", dstPod.Namespace, dstPod.Name)]
+				if dstWorkloadEndpoint.Kind == "" {
+					dstWorkloadEndpoint = NetworkEndpoint{Kind: "workload", Namespace: dstPod.Namespace, Name: dstPod.Name}
 				}
+				dstServiceEndpoints = servicesForIP(flow.DstIP, serviceByIP, serviceIndex)
+			} else {
+				dstPodEndpoint = NetworkEndpoint{Kind: "external", Name: class}
+				dstNsEndpoint = NetworkEndpoint{Kind: "external", Name: class}
+				dstWorkloadEndpoint = NetworkEndpoint{Kind: "external", Name: class}
 			}
-		} else if len(srcServiceEndpoints) > 0 {
-			dstExternal := NetworkEndpoint{Kind: "external", Name: class}
-			for _, srcSvc := range srcServiceEndpoints {
-				accumulateConnection(serviceConnections, srcSvc, dstExternal, class, flow.TxBytes, flow.RxBytes, cost)
+
+			accumulateConnection(podConnections, srcPodEndpoint, dstPodEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
+			accumulateConnection(namespaceConnections, srcNsEndpoint, dstNsEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
+			accumulateConnection(workloadConnections, srcWorkloadEndpoint, dstWorkloadEndpoint, class, flow.TxBytes, flow.RxBytes, cost)
+
+			srcServiceEndpoints := servicesForIP(flow.SrcIP, serviceByIP, serviceIndex)
+			if len(srcServiceEndpoints) > 0 && len(dstServiceEndpoints) > 0 {
+				for _, srcSvc := range srcServiceEndpoints {
+					for _, dstSvc := range dstServiceEndpoints {
+						accumulateConnection(serviceConnections, srcSvc, dstSvc, class, flow.TxBytes, flow.RxBytes, cost)
+					}
+				}
+			} else if len(srcServiceEndpoints) > 0 {
+				dstExternal := NetworkEndpoint{Kind: "external", Name: class}
+				for _, srcSvc := range srcServiceEndpoints {
+					accumulateConnection(serviceConnections, srcSvc, dstExternal, class, flow.TxBytes, flow.RxBytes, cost)
+				}
 			}
 		}
 	}

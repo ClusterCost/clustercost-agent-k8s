@@ -69,6 +69,8 @@ spec:
           securityContext:
             privileged: true
             allowPrivilegeEscalation: true
+            seccompProfile:
+              type: Unconfined
             capabilities:
               add:
                 - SYS_RESOURCE
@@ -115,7 +117,7 @@ spec:
             - name: CLUSTERCOST_REMOTE_ENABLED
               value: "true"
             - name: CLUSTERCOST_REMOTE_ENDPOINT
-              value: "https://central-agent.example.com/agent/v1/report"
+              value: "clustercost-dashboard.clustercost.svc.cluster.local:9091"
             - name: CLUSTERCOST_REMOTE_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -149,6 +151,9 @@ spec:
             - name: btf
               mountPath: /sys/kernel/btf
               readOnly: true
+            - name: debug
+              mountPath: /sys/kernel/debug
+              readOnly: false
             - name: queue
               mountPath: /var/lib/clustercost/queue
           ports:
@@ -183,6 +188,9 @@ spec:
         - name: btf
           hostPath:
             path: /sys/kernel/btf
+        - name: debug
+          hostPath:
+            path: /sys/kernel/debug
         - name: queue
           emptyDir: {}
 ---

@@ -1,0 +1,140 @@
+syntax = "proto3";
+
+package agent.v1;
+
+option go_package = "clustercost-agent-k8s/internal/proto/agent/v1;agentv1";
+
+service Collector {
+  // Report sends a single agent report to the collector.
+  rpc Report(ReportRequest) returns (ReportResponse);
+  // ReportBatch sends multiple agent reports in a single request.
+  rpc ReportBatch(ReportBatchRequest) returns (ReportResponse);
+}
+
+message ReportRequest {
+  string cluster_id = 1;
+  string cluster_name = 2;
+  string node_name = 3;
+  string agent_id = 4;
+  string version = 5;
+  int64 timestamp_seconds = 6;
+  
+  Snapshot snapshot = 7;
+}
+
+message ReportBatchRequest {
+  repeated ReportRequest reports = 1;
+}
+
+message ReportResponse {
+  bool accepted = 1;
+  string error_message = 2;
+}
+
+message Snapshot {
+  int64 timestamp_seconds = 1;
+  repeated NamespaceCostRecord namespaces = 2;
+  repeated NodeCostRecord nodes = 3;
+  ResourceSnapshot resources = 4;
+  NetworkSnapshot network = 5;
+}
+
+message NamespaceCostRecord {
+  string cluster_id = 1;
+  string namespace = 2;
+  map<string, string> labels = 3;
+  string environment = 4;
+  int64 cpu_request_milli = 5;
+  int64 cpu_usage_milli = 6;
+  int64 memory_request_bytes = 7;
+  int64 memory_usage_bytes = 8;
+  int64 pod_count = 9;
+  double hourly_cost = 10;
+  uint64 network_tx_bytes = 11;
+  uint64 network_rx_bytes = 12;
+  double network_egress_cost = 13;
+}
+
+message NodeCostRecord {
+  string cluster_id = 1;
+  string node_name = 2;
+  int64 cpu_allocatable_milli = 3;
+  int64 memory_allocatable_bytes = 4;
+  map<string, string> labels = 5;
+  repeated string taints = 6;
+  string instance_type = 7;
+  string status = 8;
+  bool is_under_pressure = 9;
+  double hourly_cost = 10;
+  double cpu_usage_percent = 11;
+  double memory_usage_percent = 12;
+  int64 pod_count = 13;
+}
+
+message ResourceSnapshot {
+  string cluster_id = 1;
+  int64 cpu_usage_milli_total = 2;
+  int64 cpu_request_milli_total = 3;
+  int64 memory_usage_bytes_total = 4;
+  int64 memory_request_bytes_total = 5;
+  double total_node_hourly_cost = 6;
+  uint64 network_tx_bytes_total = 7;
+  uint64 network_rx_bytes_total = 8;
+  double network_egress_cost_total = 9;
+}
+
+message NetworkSnapshot {
+  string cluster_id = 1;
+  uint64 tx_bytes = 2;
+  uint64 rx_bytes = 3;
+  double egress_cost = 4;
+  repeated NetworkClassTotals by_class = 5;
+  repeated PodNetworkRecord pods = 6;
+  repeated NamespaceNetworkRecord namespaces = 7;
+  
+  // Detailed connection graphs (optional/feature-flagged)
+  repeated NetworkConnection pod_connections = 8;
+  repeated NetworkConnection workload_connections = 9;
+  repeated NetworkConnection namespace_connections = 10;
+  repeated NetworkConnection service_connections = 11;
+}
+
+message NetworkClassTotals {
+  string class = 1;
+  uint64 tx_bytes = 2;
+  uint64 rx_bytes = 3;
+  double egress_cost_hourly = 4;
+}
+
+message PodNetworkRecord {
+  string namespace = 1;
+  string pod = 2;
+  string node = 3;
+  uint64 tx_bytes = 4;
+  uint64 rx_bytes = 5;
+  double egress_cost_hourly = 6;
+  repeated NetworkClassTotals by_class = 7;
+}
+
+message NamespaceNetworkRecord {
+  string namespace = 1;
+  uint64 tx_bytes = 2;
+  uint64 rx_bytes = 3;
+  double egress_cost_hourly = 4;
+  repeated NetworkClassTotals by_class = 5;
+}
+
+message NetworkConnection {
+  NetworkEndpoint source = 1;
+  NetworkEndpoint destination = 2;
+  string class = 3;
+  uint64 tx_bytes = 4;
+  uint64 rx_bytes = 5;
+  double egress_cost_hourly = 6;
+}
+
+message NetworkEndpoint {
+  string kind = 1;
+  string namespace = 2;
+  string name = 3;
+}

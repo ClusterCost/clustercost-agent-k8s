@@ -144,3 +144,13 @@ func clusterNameFromNodes(ctx context.Context, client kubernetes.Interface) (str
 	}
 	return "", nil
 }
+
+// GetClusterID returns the unique identifier of the cluster,
+// typically using the kube-system namespace UID.
+func GetClusterID(ctx context.Context, client kubernetes.Interface) (string, error) {
+	ns, err := client.CoreV1().Namespaces().Get(ctx, "kube-system", metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return string(ns.UID), nil
+}

@@ -25,7 +25,7 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 	})
 	prices := NewNodePriceLookup(map[string]float64{"m6a.large": 0.1}, 0.2)
 	netPrices := NewNetworkPriceLookup(0, nil)
-	builder := NewBuilder("cluster-1", classifier, prices, netPrices)
+	builder := NewBuilder("cluster-1", classifier, prices, netPrices, true)
 
 	node := &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{

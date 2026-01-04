@@ -15,8 +15,8 @@ type NamespaceCostRecord struct {
 	NetworkTxBytes     uint64            `json:"networkTxBytes"`
 	NetworkRxBytes     uint64            `json:"networkRxBytes"`
 	NetworkEgressCost  float64           `json:"networkEgressCostHourly"`
-	Labels             map[string]string `json:"labels"`
-	Environment        string            `json:"environment"`
+	Labels             map[string]string `json:"labels,omitempty"`
+	Environment        string            `json:"environment,omitempty"`
 }
 
 // NodeCostRecord captures node pricing and utilization.
@@ -32,8 +32,8 @@ type NodeCostRecord struct {
 	Status                 string            `json:"status"`
 	IsUnderPressure        bool              `json:"isUnderPressure"`
 	InstanceType           string            `json:"instanceType"`
-	Labels                 map[string]string `json:"labels"`
-	Taints                 []string          `json:"taints"`
+	Labels                 map[string]string `json:"labels,omitempty"`
+	Taints                 []string          `json:"taints,omitempty"`
 }
 
 // ResourceSnapshot stores global cluster totals.
@@ -65,7 +65,7 @@ type PodNetworkRecord struct {
 	TxBytes          uint64               `json:"txBytes"`
 	RxBytes          uint64               `json:"rxBytes"`
 	EgressCostHourly float64              `json:"egressCostHourly"`
-	ByClass          []NetworkClassTotals `json:"byClass"`
+	ByClass          []NetworkClassTotals `json:"byClass,omitempty"`
 }
 
 // NamespaceNetworkRecord aggregates network usage by namespace.
@@ -74,7 +74,7 @@ type NamespaceNetworkRecord struct {
 	TxBytes          uint64               `json:"txBytes"`
 	RxBytes          uint64               `json:"rxBytes"`
 	EgressCostHourly float64              `json:"egressCostHourly"`
-	ByClass          []NetworkClassTotals `json:"byClass"`
+	ByClass          []NetworkClassTotals `json:"byClass,omitempty"`
 }
 
 // NetworkSnapshot provides network usage and cost details.
@@ -83,13 +83,13 @@ type NetworkSnapshot struct {
 	TxBytes              uint64                   `json:"txBytes"`
 	RxBytes              uint64                   `json:"rxBytes"`
 	EgressCost           float64                  `json:"egressCostHourly"`
-	ByClass              []NetworkClassTotals     `json:"byClass"`
-	Pods                 []PodNetworkRecord       `json:"pods"`
-	Namespaces           []NamespaceNetworkRecord `json:"namespaces"`
-	PodConnections       []NetworkConnection      `json:"podConnections"`
-	WorkloadConnections  []NetworkConnection      `json:"workloadConnections"`
-	NamespaceConnections []NetworkConnection      `json:"namespaceConnections"`
-	ServiceConnections   []NetworkConnection      `json:"serviceConnections"`
+	ByClass              []NetworkClassTotals     `json:"byClass,omitempty"`
+	Pods                 []PodNetworkRecord       `json:"pods,omitempty"`
+	Namespaces           []NamespaceNetworkRecord `json:"namespaces,omitempty"`
+	PodConnections       []NetworkConnection      `json:"podConnections,omitempty"`
+	WorkloadConnections  []NetworkConnection      `json:"workloadConnections,omitempty"`
+	NamespaceConnections []NetworkConnection      `json:"namespaceConnections,omitempty"`
+	ServiceConnections   []NetworkConnection      `json:"serviceConnections,omitempty"`
 }
 
 // NetworkEndpoint identifies a connection endpoint.

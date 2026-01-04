@@ -10,20 +10,31 @@ import (
 	"time"
 )
 
-// Sender posts AgentReports to a remote endpoint.
-type Sender struct {
+// Forwarder abstracts sending reports to a remote collector.
+type Forwarder interface {
+	Send(ctx context.Context, report AgentReport) error
+	SendBatch(ctx context.Context, reports []AgentReport) error
+	Close() error
+}
+
+// HTTPSender posts AgentReports to a remote endpoint via HTTP.
+type HTTPSender struct {
 	client    *http.Client
 	endpoint  string
 	authToken string
 	gzip      bool
 }
 
-// NewSender returns a configured Sender.
-func NewSender(endpoint, authToken string, timeout time.Duration, gzipEnabled bool) *Sender {
+func (s *HTTPSender) Close() error {
+	return nil
+}
+
+// NewHTTPSender returns a configured HTTPSender.
+func NewHTTPSender(endpoint, authToken string, timeout time.Duration, gzipEnabled bool) *HTTPSender {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	return &Sender{
+	return &HTTPSender{
 		client: &http.Client{
 			Timeout: timeout,
 		},
@@ -34,7 +45,7 @@ func NewSender(endpoint, authToken string, timeout time.Duration, gzipEnabled bo
 }
 
 // Send POSTs the report to the remote endpoint.
-func (s *Sender) Send(ctx context.Context, report AgentReport) error {
+func (s *HTTPSender) Send(ctx context.Context, report AgentReport) error {
 	if s == nil || s.endpoint == "" {
 		return nil
 	}
@@ -71,7 +82,7 @@ func (s *Sender) Send(ctx context.Context, report AgentReport) error {
 }
 
 // SendBatch POSTs a list of reports to the remote endpoint.
-func (s *Sender) SendBatch(ctx context.Context, reports []AgentReport) error {
+func (s *HTTPSender) SendBatch(ctx context.Context, reports []AgentReport) error {
 	if s == nil || s.endpoint == "" {
 		return nil
 	}
@@ -111,7 +122,7 @@ func (s *Sender) SendBatch(ctx context.Context, reports []AgentReport) error {
 	return nil
 }
 
-func (s *Sender) wrap(payload []byte) (*bytes.Reader, error) {
+func (s *HTTPSender) wrap(payload []byte) (*bytes.Reader, error) {
 	if !s.gzip {
 		return bytes.NewReader(payload), nil
 	}

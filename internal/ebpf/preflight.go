@@ -94,7 +94,11 @@ func checkPinDirWritable(report *PreflightReport, label, pinPath string) {
 	}
 
 	// CRITICAL: If this is on BPFFS, we cannot create regular files. We must use MkdirTemp.
-	tmpDir, err := os.MkdirTemp(dir, ".clustercost-ebpf-check-")
+	// Create temp dir to test write access.
+	// NOTE(security): AL2023 and some restricted seccomp profiles block creating
+	// hidden files/dirs (starting with .) in /sys/fs/bpf.
+	// We use "clustercost-ebpf-check-" (no dot) to avoid EPERM.
+	tmpDir, err := os.MkdirTemp(dir, "clustercost-ebpf-check-")
 	if err != nil {
 		report.Issues = append(report.Issues, PreflightIssue{
 			Component: label,

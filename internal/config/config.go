@@ -55,6 +55,7 @@ type NetworkPricingConfig struct {
 // NetworkConfig configures network usage collection.
 type NetworkConfig struct {
 	Enabled    bool   `yaml:"enabled"`
+	Detailed   bool   `yaml:"detailed"`
 	BPFMapPath string `yaml:"bpfMapPath"`
 	ObjectPath string `yaml:"objectPath"`
 	CgroupPath string `yaml:"cgroupPath"`
@@ -83,6 +84,7 @@ type RemoteConfig struct {
 	MaxBatchBytes int64         `yaml:"maxBatchBytes"`
 	MemoryBuffer  int           `yaml:"memoryBuffer"`
 	GzipEnabled   bool          `yaml:"gzipEnabled"`
+	Protocol      string        `yaml:"protocol"` // "http" or "grpc"
 }
 
 // EnvironmentConfig holds heuristics for namespace classification.
@@ -120,6 +122,7 @@ func DefaultConfig() Config {
 		},
 		Network: NetworkConfig{
 			Enabled:    false,
+			Detailed:   false,
 			BPFMapPath: "/sys/fs/bpf/clustercost/flows",
 			ObjectPath: "/opt/clustercost/bpf/flows.bpf.o",
 			CgroupPath: "/sys/fs/cgroup",
@@ -144,6 +147,7 @@ func DefaultConfig() Config {
 			MaxBatchBytes: 512 * 1024,
 			MemoryBuffer:  200,
 			GzipEnabled:   true,
+			Protocol:      "grpc",
 		},
 		Environment: EnvironmentConfig{
 			LabelKeys: []string{"clustercost.io/environment"},
@@ -199,6 +203,7 @@ func Load() (Config, error) {
 	fs.Float64Var(&cfg.Pricing.CPUCoreHourPriceUSD, "cpu-price", cfg.Pricing.CPUCoreHourPriceUSD, "CPU core hour price in USD")
 	fs.Float64Var(&cfg.Pricing.MemoryGiBHourPriceUSD, "memory-price", cfg.Pricing.MemoryGiBHourPriceUSD, "Memory GiB hour price in USD")
 	fs.BoolVar(&cfg.Network.Enabled, "enable-network-cost", cfg.Network.Enabled, "Enable eBPF-based network cost collection")
+	fs.BoolVar(&cfg.Network.Detailed, "enable-network-detailed", cfg.Network.Detailed, "Enable detailed network connection reporting")
 	fs.StringVar(&cfg.Network.BPFMapPath, "ebpf-map-path", cfg.Network.BPFMapPath, "Pinned eBPF map path for network flow stats")
 	fs.StringVar(&cfg.Network.ObjectPath, "ebpf-net-object", cfg.Network.ObjectPath, "Path to eBPF network object file")
 	fs.StringVar(&cfg.Network.CgroupPath, "ebpf-net-cgroup-path", cfg.Network.CgroupPath, "Cgroup path for eBPF network attachment")
@@ -220,6 +225,7 @@ func Load() (Config, error) {
 	fs.Int64Var(&cfg.Remote.MaxBatchBytes, "remote-max-batch-bytes", cfg.Remote.MaxBatchBytes, "Max payload size per batch in bytes")
 	fs.IntVar(&cfg.Remote.MemoryBuffer, "remote-memory-buffer", cfg.Remote.MemoryBuffer, "In-memory buffer size before spooling to disk")
 	fs.BoolVar(&cfg.Remote.GzipEnabled, "remote-gzip", cfg.Remote.GzipEnabled, "Enable gzip compression for batches")
+	fs.StringVar(&cfg.Remote.Protocol, "remote-protocol", cfg.Remote.Protocol, "Remote protocol (http or grpc)")
 
 	if err := fs.Parse(os.Args[1:]); err != nil { // flag set already prints errors
 		return Config{}, err
@@ -402,6 +408,11 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Network.Enabled = bv
 		}
 	}
+	if v := os.Getenv("CLUSTERCOST_NETWORK_DETAILED"); v != "" {
+		if bv, err := strconv.ParseBool(v); err == nil {
+			cfg.Network.Detailed = bv
+		}
+	}
 	if v := os.Getenv("CLUSTERCOST_EBPF_MAP_PATH"); v != "" {
 		cfg.Network.BPFMapPath = v
 	}
@@ -492,6 +503,9 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Remote.GzipEnabled = bv
 		}
 	}
+	if v := os.Getenv("CLUSTERCOST_REMOTE_PROTOCOL"); v != "" {
+		cfg.Remote.Protocol = v
+	}
 }
 
 func envOrDefault(key, def string) string {
@@ -577,6 +591,9 @@ func mergeNetworkConfig(base *NetworkConfig, override NetworkConfig) {
 	if override.Enabled {
 		base.Enabled = override.Enabled
 	}
+	if override.Detailed {
+		base.Detailed = override.Detailed
+	}
 	if override.BPFMapPath != "" {
 		base.BPFMapPath = override.BPFMapPath
 	}
@@ -642,5 +659,8 @@ func mergeRemoteConfig(base *RemoteConfig, override RemoteConfig) {
 	}
 	if override.GzipEnabled {
 		base.GzipEnabled = override.GzipEnabled
+	}
+	if override.Protocol != "" {
+		base.Protocol = override.Protocol
 	}
 }
