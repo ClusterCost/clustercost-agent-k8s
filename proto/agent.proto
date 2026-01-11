@@ -33,26 +33,36 @@ message ReportResponse {
 
 message Snapshot {
   int64 timestamp_seconds = 1;
-  repeated NamespaceCostRecord namespaces = 2;
-  repeated NodeCostRecord nodes = 3;
+  NodeCostRecord node = 2;
+  repeated PodRecord pods = 3;
   ResourceSnapshot resources = 4;
-  NetworkSnapshot network = 5;
 }
 
-message NamespaceCostRecord {
-  string cluster_id = 1;
-  string namespace = 2;
-  map<string, string> labels = 3;
-  string environment = 4;
-  int64 cpu_request_milli = 5;
-  int64 cpu_usage_milli = 6;
-  int64 memory_request_bytes = 7;
-  int64 memory_usage_bytes = 8;
-  int64 pod_count = 9;
-  double hourly_cost = 10;
-  uint64 network_tx_bytes = 11;
-  uint64 network_rx_bytes = 12;
-  double network_egress_cost = 13;
+message PodRecord {
+  // Metadata
+  string namespace = 1;
+  string pod = 2;
+  string node = 3;
+  map<string, string> labels = 4;
+  string environment = 5;
+  string owner_kind = 6;
+  string owner_name = 7;
+
+  // Resources
+  int64 cpu_request_milli = 8;
+  int64 cpu_usage_milli = 9;
+  int64 memory_request_bytes = 10;
+  int64 memory_usage_bytes = 11;
+  double resource_hourly_cost = 12;
+
+  // Network
+  uint64 network_tx_bytes = 13;
+  uint64 network_rx_bytes = 14;
+  double network_egress_cost_hourly = 15;
+  repeated NetworkClassTotals network_by_class = 16;
+
+  // Total
+  double total_hourly_cost = 17;
 }
 
 message NodeCostRecord {
@@ -83,58 +93,9 @@ message ResourceSnapshot {
   double network_egress_cost_total = 9;
 }
 
-message NetworkSnapshot {
-  string cluster_id = 1;
-  uint64 tx_bytes = 2;
-  uint64 rx_bytes = 3;
-  double egress_cost = 4;
-  repeated NetworkClassTotals by_class = 5;
-  repeated PodNetworkRecord pods = 6;
-  repeated NamespaceNetworkRecord namespaces = 7;
-  
-  // Detailed connection graphs (optional/feature-flagged)
-  repeated NetworkConnection pod_connections = 8;
-  repeated NetworkConnection workload_connections = 9;
-  repeated NetworkConnection namespace_connections = 10;
-  repeated NetworkConnection service_connections = 11;
-}
-
 message NetworkClassTotals {
   string class = 1;
   uint64 tx_bytes = 2;
   uint64 rx_bytes = 3;
   double egress_cost_hourly = 4;
-}
-
-message PodNetworkRecord {
-  string namespace = 1;
-  string pod = 2;
-  string node = 3;
-  uint64 tx_bytes = 4;
-  uint64 rx_bytes = 5;
-  double egress_cost_hourly = 6;
-  repeated NetworkClassTotals by_class = 7;
-}
-
-message NamespaceNetworkRecord {
-  string namespace = 1;
-  uint64 tx_bytes = 2;
-  uint64 rx_bytes = 3;
-  double egress_cost_hourly = 4;
-  repeated NetworkClassTotals by_class = 5;
-}
-
-message NetworkConnection {
-  NetworkEndpoint source = 1;
-  NetworkEndpoint destination = 2;
-  string class = 3;
-  uint64 tx_bytes = 4;
-  uint64 rx_bytes = 5;
-  double egress_cost_hourly = 6;
-}
-
-message NetworkEndpoint {
-  string kind = 1;
-  string namespace = 2;
-  string name = 3;
 }

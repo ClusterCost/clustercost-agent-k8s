@@ -15,16 +15,18 @@ type Handler struct {
 	clusterName   string
 	clusterRegion string
 	version       string
+	agentID       string
 	store         *snapshot.Store
 }
 
 // NewHandler builds a Handler bound to the snapshot store.
-func NewHandler(clusterType, clusterName, clusterRegion, version string, store *snapshot.Store) *Handler {
+func NewHandler(clusterType, clusterName, clusterRegion, version, agentID string, store *snapshot.Store) *Handler {
 	return &Handler{
 		clusterType:   clusterType,
 		clusterName:   clusterName,
 		clusterRegion: clusterRegion,
 		version:       version,
+		agentID:       agentID,
 		store:         store,
 	}
 }
@@ -34,10 +36,9 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/agent/v1/readyz", h.readyz)
 	mux.HandleFunc("/agent/v1/overview", h.overview)
 	mux.HandleFunc("/agent/v1/health", h.health)
-	mux.HandleFunc("/agent/v1/namespaces", h.namespaces)
+	mux.HandleFunc("/agent/v1/pods", h.pods)
 	mux.HandleFunc("/agent/v1/nodes", h.nodes)
 	mux.HandleFunc("/agent/v1/resources", h.resources)
-	mux.HandleFunc("/agent/v1/network", h.network)
 	mux.HandleFunc("/api/debug/report", h.debugReport)
 }
 
@@ -92,10 +93,10 @@ func (h *Handler) readyz(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
 }
 
-func (h *Handler) namespaces(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) pods(w http.ResponseWriter, r *http.Request) {
 	if snap, ok := h.store.Latest(); ok {
 		payload := map[string]any{
-			"items":     snap.Namespaces,
+			"items":     snap.Pods,
 			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
 		}
 		respondJSON(w, http.StatusOK, payload)
@@ -106,8 +107,12 @@ func (h *Handler) namespaces(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
 	if snap, ok := h.store.Latest(); ok {
+		items := []snapshot.NodeCostRecord{}
+		if snap.Node != nil {
+			items = append(items, *snap.Node)
+		}
 		payload := map[string]any{
-			"items":     snap.Nodes,
+			"items":     items,
 			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
 		}
 		respondJSON(w, http.StatusOK, payload)
@@ -128,18 +133,6 @@ func (h *Handler) resources(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
 }
 
-func (h *Handler) network(w http.ResponseWriter, r *http.Request) {
-	if snap, ok := h.store.Latest(); ok {
-		payload := map[string]any{
-			"network":   snap.Network,
-			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
-		}
-		respondJSON(w, http.StatusOK, payload)
-		return
-	}
-	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-}
-
 func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
 	snap, ok := h.store.Latest()
 	if !ok {
@@ -151,6 +144,7 @@ func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
 		ClusterID:   snap.Resources.ClusterID,
 		ClusterName: h.clusterName,
 		NodeName:    "debug-manual-pull",
+		AgentID:     h.agentID,
 		Version:     h.version,
 		Timestamp:   time.Now().UTC(),
 		Snapshot:    snap,

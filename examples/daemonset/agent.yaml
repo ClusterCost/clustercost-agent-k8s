@@ -61,6 +61,7 @@ spec:
     spec:
       serviceAccountName: clustercost-agent
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       hostPID: true
       containers:
         - name: agent

@@ -57,63 +57,38 @@ type NetworkClassTotals struct {
 	EgressCostHourly float64 `json:"egressCostHourly"`
 }
 
-// PodNetworkRecord provides per-pod traffic classification.
-type PodNetworkRecord struct {
-	Namespace        string               `json:"namespace"`
-	Pod              string               `json:"pod"`
-	Node             string               `json:"node"`
-	TxBytes          uint64               `json:"txBytes"`
-	RxBytes          uint64               `json:"rxBytes"`
-	EgressCostHourly float64              `json:"egressCostHourly"`
-	ByClass          []NetworkClassTotals `json:"byClass,omitempty"`
-}
+// PodRecord captures all metadata, resource usage, and network usage for a single pod.
+type PodRecord struct {
+	// Metadata
+	Namespace   string            `json:"namespace"`
+	Pod         string            `json:"pod"`
+	Node        string            `json:"node"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Environment string            `json:"environment,omitempty"`
+	OwnerKind   string            `json:"ownerKind,omitempty"`
+	OwnerName   string            `json:"ownerName,omitempty"`
 
-// NamespaceNetworkRecord aggregates network usage by namespace.
-type NamespaceNetworkRecord struct {
-	Namespace        string               `json:"namespace"`
-	TxBytes          uint64               `json:"txBytes"`
-	RxBytes          uint64               `json:"rxBytes"`
-	EgressCostHourly float64              `json:"egressCostHourly"`
-	ByClass          []NetworkClassTotals `json:"byClass,omitempty"`
-}
+	// Resources
+	CPURequestMilli    int64   `json:"cpuRequestMilli"`
+	CPUUsageMilli      int64   `json:"cpuUsageMilli"`
+	MemoryRequestBytes int64   `json:"memoryRequestBytes"`
+	MemoryUsageBytes   int64   `json:"memoryUsageBytes"`
+	ResourceHourlyCost float64 `json:"resourceHourlyCost"`
 
-// NetworkSnapshot provides network usage and cost details.
-type NetworkSnapshot struct {
-	ClusterID            string                   `json:"clusterId"`
-	TxBytes              uint64                   `json:"txBytes"`
-	RxBytes              uint64                   `json:"rxBytes"`
-	EgressCost           float64                  `json:"egressCostHourly"`
-	ByClass              []NetworkClassTotals     `json:"byClass,omitempty"`
-	Pods                 []PodNetworkRecord       `json:"pods,omitempty"`
-	Namespaces           []NamespaceNetworkRecord `json:"namespaces,omitempty"`
-	PodConnections       []NetworkConnection      `json:"podConnections,omitempty"`
-	WorkloadConnections  []NetworkConnection      `json:"workloadConnections,omitempty"`
-	NamespaceConnections []NetworkConnection      `json:"namespaceConnections,omitempty"`
-	ServiceConnections   []NetworkConnection      `json:"serviceConnections,omitempty"`
-}
+	// Network
+	NetworkTxBytes          uint64               `json:"networkTxBytes"`
+	NetworkRxBytes          uint64               `json:"networkRxBytes"`
+	NetworkEgressCostHourly float64              `json:"networkEgressCostHourly"`
+	NetworkByClass          []NetworkClassTotals `json:"networkByClass,omitempty"`
 
-// NetworkEndpoint identifies a connection endpoint.
-type NetworkEndpoint struct {
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-}
-
-// NetworkConnection captures aggregated flow traffic between endpoints.
-type NetworkConnection struct {
-	Source           NetworkEndpoint `json:"source"`
-	Destination      NetworkEndpoint `json:"destination"`
-	Class            string          `json:"class"`
-	TxBytes          uint64          `json:"txBytes"`
-	RxBytes          uint64          `json:"rxBytes"`
-	EgressCostHourly float64         `json:"egressCostHourly"`
+	// Total
+	TotalHourlyCost float64 `json:"totalHourlyCost"`
 }
 
 // Snapshot is the unit exchanged between the builder and the HTTP API.
 type Snapshot struct {
-	Timestamp  time.Time             `json:"timestamp"`
-	Namespaces []NamespaceCostRecord `json:"namespaces"`
-	Nodes      []NodeCostRecord      `json:"nodes"`
-	Resources  ResourceSnapshot      `json:"resources"`
-	Network    NetworkSnapshot       `json:"network"`
+	Timestamp time.Time        `json:"timestamp"`
+	Node      *NodeCostRecord  `json:"node"`
+	Pods      []PodRecord      `json:"pods"`
+	Resources ResourceSnapshot `json:"resources"`
 }

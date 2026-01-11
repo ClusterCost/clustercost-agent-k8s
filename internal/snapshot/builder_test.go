@@ -20,6 +20,7 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 	classifier := NewEnvironmentClassifier(ClassifierConfig{
 		LabelKeys:              []string{"clustercost.io/environment"},
 		ProductionLabelValues:  []string{"prod"},
+		NonProdLabelValues:     []string{"nonprod"},
 		SystemNamespaces:       []string{"kube-system"},
 		ProductionNameContains: []string{"prod"},
 	})
@@ -62,7 +63,10 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 			Name:      "api-0",
 			Namespace: "payments",
 			OwnerReferences: []metav1.OwnerReference{
-				{Kind: "Deployment", Name: "api"},
+				{Kind: "Deployment", Name: "api", Controller: boolPtr(true)},
+			},
+			Labels: map[string]string{
+				"clustercost.io/environment": "prod",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -87,7 +91,10 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 			Name:      "worker-0",
 			Namespace: "sandbox",
 			OwnerReferences: []metav1.OwnerReference{
-				{Kind: "Deployment", Name: "worker"},
+				{Kind: "Deployment", Name: "worker", Controller: boolPtr(true)},
+			},
+			Labels: map[string]string{
+				"clustercost.io/environment": "nonprod",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -179,47 +186,60 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 		time.Unix(123, 0),
 	)
 
-	if len(snap.Namespaces) != 2 {
-		t.Fatalf("expected 2 namespaces, got %d", len(snap.Namespaces))
-	}
+	var prodPod, nonProdPod PodRecord
+	foundProd, foundNonProd := false, false
 
-	var prodNS, nonProdNS NamespaceCostRecord
-	for _, ns := range snap.Namespaces {
-		switch ns.Namespace {
-		case "payments":
-			prodNS = ns
-		case "sandbox":
-			nonProdNS = ns
+	for _, p := range snap.Pods {
+		if p.Pod == "api-0" && p.Namespace == "payments" {
+			prodPod = p
+			foundProd = true
+		} else if p.Pod == "worker-0" && p.Namespace == "sandbox" {
+			nonProdPod = p
+			foundNonProd = true
 		}
 	}
 
-	if prodNS.Environment != "production" {
-		t.Fatalf("payments env = %s", prodNS.Environment)
-	}
-	if prodNS.PodCount != 1 || prodNS.CPURequestMilli != 500 || prodNS.CPUUsageMilli != 400 {
-		t.Fatalf("unexpected prod namespace stats: %+v", prodNS)
-	}
-	if !almostEqual(prodNS.HourlyCost, 0.025) {
-		t.Fatalf("prod hourly cost %.4f", prodNS.HourlyCost)
+	if !foundProd || !foundNonProd {
+		t.Fatalf("expected to find api-0 and worker-0 pods")
 	}
 
-	if nonProdNS.Environment != "nonprod" {
-		t.Fatalf("sandbox env = %s", nonProdNS.Environment)
+	// Verify Prod Pod (api-0)
+	if prodPod.Environment != "production" {
+		t.Fatalf("payments env = %s", prodPod.Environment)
 	}
-	if nonProdNS.CPUUsageMilli != 250 {
-		t.Fatalf("sandbox usage fallback expected 250, got %d", nonProdNS.CPUUsageMilli)
+	if prodPod.OwnerKind != "Deployment" || prodPod.OwnerName != "api" {
+		t.Fatalf("unexpected owner: %s/%s", prodPod.OwnerKind, prodPod.OwnerName)
 	}
-	if !almostEqual(nonProdNS.HourlyCost, 0.0125) {
-		t.Fatalf("sandbox hourly cost %.4f", nonProdNS.HourlyCost)
+	if prodPod.CPURequestMilli != 500 || prodPod.CPUUsageMilli != 400 {
+		t.Fatalf("unexpected prod pod resource stats: %+v", prodPod)
 	}
-	if prodNS.NetworkTxBytes != 1024 || prodNS.NetworkRxBytes != 2048 {
-		t.Fatalf("prod network totals unexpected: %+v", prodNS)
+	// 500m / 2000m * 0.1 = 0.025
+	if !almostEqual(prodPod.ResourceHourlyCost, 0.025) {
+		t.Fatalf("prod pod resource cost %.4f", prodPod.ResourceHourlyCost)
+	}
+	if prodPod.NetworkTxBytes != 1024 || prodPod.NetworkRxBytes != 2048 {
+		t.Fatalf("prod pod network totals unexpected: %+v", prodPod)
+	}
+	if len(prodPod.NetworkByClass) != 1 || prodPod.NetworkByClass[0].Class != "public_internet" {
+		t.Fatalf("prod pod network class totals unexpected: %+v", prodPod.NetworkByClass)
 	}
 
-	if len(snap.Nodes) != 1 {
+	// Verify NonProd Pod (worker-0)
+	if nonProdPod.Environment != "nonprod" {
+		t.Fatalf("sandbox env = %s", nonProdPod.Environment)
+	}
+	if nonProdPod.CPUUsageMilli != 250 {
+		t.Fatalf("sandbox usage fallback expected 250, got %d", nonProdPod.CPUUsageMilli)
+	}
+	// 250m / 2000m * 0.1 = 0.0125
+	if !almostEqual(nonProdPod.ResourceHourlyCost, 0.0125) {
+		t.Fatalf("sandbox pod cost %.4f", nonProdPod.ResourceHourlyCost)
+	}
+
+	if snap.Node == nil {
 		t.Fatalf("expected single node record")
 	}
-	nodeRec := snap.Nodes[0]
+	nodeRec := *snap.Node
 	if nodeRec.PodCount != 2 {
 		t.Fatalf("node podCount %d", nodeRec.PodCount)
 	}
@@ -237,39 +257,12 @@ func TestBuilderAggregatesSnapshot(t *testing.T) {
 	if res.NetworkTxBytesTotal != 1024 || res.NetworkRxBytesTotal != 2048 {
 		t.Fatalf("cluster network totals unexpected: %+v", res)
 	}
-	if len(snap.Network.Pods) != 2 {
-		t.Fatalf("expected 2 pod network records, got %d", len(snap.Network.Pods))
-	}
-	if len(snap.Network.ByClass) != 1 || snap.Network.ByClass[0].Class != "public_internet" {
-		t.Fatalf("network class totals unexpected: %+v", snap.Network.ByClass)
-	}
-	if len(snap.Network.PodConnections) == 0 {
-		t.Fatalf("expected pod connection records")
-	}
-	if len(snap.Network.WorkloadConnections) == 0 {
-		t.Fatalf("expected workload connection records")
-	}
-	if len(snap.Network.NamespaceConnections) == 0 {
-		t.Fatalf("expected namespace connection records")
-	}
-	if !hasServiceConnection(snap.Network.ServiceConnections, "payments", "api", "sandbox", "worker") {
-		t.Fatalf("expected service connection between api and worker")
-	}
 }
 
 func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) < 0.0001
 }
 
-func hasServiceConnection(conns []NetworkConnection, srcNS, srcName, dstNS, dstName string) bool {
-	for _, conn := range conns {
-		if conn.Source.Kind != "service" || conn.Destination.Kind != "service" {
-			continue
-		}
-		if conn.Source.Namespace == srcNS && conn.Source.Name == srcName &&
-			conn.Destination.Namespace == dstNS && conn.Destination.Name == dstName {
-			return true
-		}
-	}
-	return false
+func boolPtr(b bool) *bool {
+	return &b
 }

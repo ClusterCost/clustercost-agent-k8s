@@ -194,7 +194,21 @@ func main() {
 		ProductionNameContains: cfg.Environment.ProductionNameContains,
 		SystemNamespaces:       cfg.Environment.SystemNamespaces,
 	})
-	priceLookup := snapshot.NewNodePriceLookup(cfg.Pricing.InstancePrices, cfg.Pricing.DefaultNodeHourlyUSD)
+	// Merge region-specific AWS prices if available
+	instancePrices := cfg.Pricing.InstancePrices
+	if cfg.Pricing.Provider == "aws" || cfg.Pricing.Provider == "" {
+		if regionPrices, ok := cfg.Pricing.AWS.NodePrices[clusterRegion]; ok {
+			if instancePrices == nil {
+				instancePrices = make(map[string]float64)
+			}
+			for k, v := range regionPrices {
+				instancePrices[k] = v
+			}
+			logger.Info("loaded aws instance prices", slog.String("region", clusterRegion), slog.Int("count", len(regionPrices)))
+		}
+	}
+
+	priceLookup := snapshot.NewNodePriceLookup(instancePrices, cfg.Pricing.DefaultNodeHourlyUSD)
 	networkPriceLookup := snapshot.NewNetworkPriceLookup(cfg.Pricing.Network.DefaultEgressGiBPriceUSD, cfg.Pricing.Network.EgressGiBPricesUSD)
 	builder := snapshot.NewBuilder(clusterID, classifier, priceLookup, networkPriceLookup, cfg.Network.Detailed)
 	store := snapshot.NewStore()
@@ -204,7 +218,7 @@ func main() {
 
 	go runSnapshotLoop(ctx, builder, cache, metricsCollector, networkCollector, queue, clusterID, clusterName, nodeName, agentID, agentVersion, store, cfg.ScrapeInterval(), logger)
 
-	apiHandler := api.NewHandler(clusterType, clusterName, clusterRegion, agentVersion, store)
+	apiHandler := api.NewHandler(clusterType, clusterName, clusterRegion, agentVersion, agentID, store)
 	mux := http.NewServeMux()
 	apiHandler.Register(mux)
 

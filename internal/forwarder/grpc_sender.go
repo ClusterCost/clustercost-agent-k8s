@@ -110,34 +110,48 @@ func (s *GRPCSender) snapshotToProto(snap snapshot.Snapshot) *agentv1.Snapshot {
 	out := &agentv1.Snapshot{
 		TimestampSeconds: snap.Timestamp.Unix(),
 		Resources:        s.resourceSnapshotToProto(snap.Resources),
-		Network:          s.networkSnapshotToProto(snap.Network),
 	}
 
-	for _, n := range snap.Namespaces {
-		out.Namespaces = append(out.Namespaces, s.namespaceCostToProto(n))
+	if snap.Node != nil {
+		out.Node = s.nodeCostToProto(*snap.Node)
 	}
-	for _, n := range snap.Nodes {
-		out.Nodes = append(out.Nodes, s.nodeCostToProto(n))
+
+	for _, p := range snap.Pods {
+		out.Pods = append(out.Pods, s.podRecordToProto(p))
 	}
+
 	return out
 }
 
-func (s *GRPCSender) namespaceCostToProto(n snapshot.NamespaceCostRecord) *agentv1.NamespaceCostRecord {
-	return &agentv1.NamespaceCostRecord{
-		ClusterId:          n.ClusterID,
-		Namespace:          n.Namespace,
-		Labels:             n.Labels,
-		Environment:        n.Environment,
-		CpuRequestMilli:    n.CPURequestMilli,
-		CpuUsageMilli:      n.CPUUsageMilli,
-		MemoryRequestBytes: n.MemoryRequestBytes,
-		MemoryUsageBytes:   n.MemoryUsageBytes,
-		PodCount:           int64(n.PodCount),
-		HourlyCost:         n.HourlyCost,
-		NetworkTxBytes:     n.NetworkTxBytes,
-		NetworkRxBytes:     n.NetworkRxBytes,
-		NetworkEgressCost:  n.NetworkEgressCost,
+func (s *GRPCSender) podRecordToProto(p snapshot.PodRecord) *agentv1.PodRecord {
+	out := &agentv1.PodRecord{
+		Namespace:               p.Namespace,
+		Pod:                     p.Pod,
+		Node:                    p.Node,
+		Labels:                  p.Labels,
+		Environment:             p.Environment,
+		OwnerKind:               p.OwnerKind,
+		OwnerName:               p.OwnerName,
+		CpuRequestMilli:         p.CPURequestMilli,
+		CpuUsageMilli:           p.CPUUsageMilli,
+		MemoryRequestBytes:      p.MemoryRequestBytes,
+		MemoryUsageBytes:        p.MemoryUsageBytes,
+		ResourceHourlyCost:      p.ResourceHourlyCost,
+		NetworkTxBytes:          p.NetworkTxBytes,
+		NetworkRxBytes:          p.NetworkRxBytes,
+		NetworkEgressCostHourly: p.NetworkEgressCostHourly,
+		TotalHourlyCost:         p.TotalHourlyCost,
 	}
+
+	for _, c := range p.NetworkByClass {
+		out.NetworkByClass = append(out.NetworkByClass, &agentv1.NetworkClassTotals{
+			Class:            c.Class,
+			TxBytes:          c.TxBytes,
+			RxBytes:          c.RxBytes,
+			EgressCostHourly: c.EgressCostHourly,
+		})
+	}
+	return out
 }
 
 func (s *GRPCSender) nodeCostToProto(n snapshot.NodeCostRecord) *agentv1.NodeCostRecord {
@@ -169,99 +183,5 @@ func (s *GRPCSender) resourceSnapshotToProto(r snapshot.ResourceSnapshot) *agent
 		NetworkTxBytesTotal:     r.NetworkTxBytesTotal,
 		NetworkRxBytesTotal:     r.NetworkRxBytesTotal,
 		NetworkEgressCostTotal:  r.NetworkEgressCostTotal,
-	}
-}
-
-func (s *GRPCSender) networkSnapshotToProto(n snapshot.NetworkSnapshot) *agentv1.NetworkSnapshot {
-	out := &agentv1.NetworkSnapshot{
-		ClusterId:  n.ClusterID,
-		TxBytes:    n.TxBytes,
-		RxBytes:    n.RxBytes,
-		EgressCost: n.EgressCost,
-	}
-
-	for _, c := range n.ByClass {
-		out.ByClass = append(out.ByClass, &agentv1.NetworkClassTotals{
-			Class:            c.Class,
-			TxBytes:          c.TxBytes,
-			RxBytes:          c.RxBytes,
-			EgressCostHourly: c.EgressCostHourly,
-		})
-	}
-	for _, p := range n.Pods {
-		out.Pods = append(out.Pods, s.podNetworkToProto(p))
-	}
-	for _, ns := range n.Namespaces {
-		out.Namespaces = append(out.Namespaces, s.namespaceNetworkToProto(ns))
-	}
-	for _, c := range n.PodConnections {
-		out.PodConnections = append(out.PodConnections, s.connectionToProto(c))
-	}
-	for _, c := range n.WorkloadConnections {
-		out.WorkloadConnections = append(out.WorkloadConnections, s.connectionToProto(c))
-	}
-	for _, c := range n.NamespaceConnections {
-		out.NamespaceConnections = append(out.NamespaceConnections, s.connectionToProto(c))
-	}
-	for _, c := range n.ServiceConnections {
-		out.ServiceConnections = append(out.ServiceConnections, s.connectionToProto(c))
-	}
-	return out
-}
-
-func (s *GRPCSender) podNetworkToProto(p snapshot.PodNetworkRecord) *agentv1.PodNetworkRecord {
-	rec := &agentv1.PodNetworkRecord{
-		Namespace:        p.Namespace,
-		Pod:              p.Pod,
-		Node:             p.Node,
-		TxBytes:          p.TxBytes,
-		RxBytes:          p.RxBytes,
-		EgressCostHourly: p.EgressCostHourly,
-	}
-	for _, c := range p.ByClass {
-		rec.ByClass = append(rec.ByClass, &agentv1.NetworkClassTotals{
-			Class:            c.Class,
-			TxBytes:          c.TxBytes,
-			RxBytes:          c.RxBytes,
-			EgressCostHourly: c.EgressCostHourly,
-		})
-	}
-	return rec
-}
-
-func (s *GRPCSender) namespaceNetworkToProto(n snapshot.NamespaceNetworkRecord) *agentv1.NamespaceNetworkRecord {
-	rec := &agentv1.NamespaceNetworkRecord{
-		Namespace:        n.Namespace,
-		TxBytes:          n.TxBytes,
-		RxBytes:          n.RxBytes,
-		EgressCostHourly: n.EgressCostHourly,
-	}
-	for _, c := range n.ByClass {
-		rec.ByClass = append(rec.ByClass, &agentv1.NetworkClassTotals{
-			Class:            c.Class,
-			TxBytes:          c.TxBytes,
-			RxBytes:          c.RxBytes,
-			EgressCostHourly: c.EgressCostHourly,
-		})
-	}
-	return rec
-}
-
-func (s *GRPCSender) connectionToProto(c snapshot.NetworkConnection) *agentv1.NetworkConnection {
-	return &agentv1.NetworkConnection{
-		Source: &agentv1.NetworkEndpoint{
-			Kind:      c.Source.Kind,
-			Namespace: c.Source.Namespace,
-			Name:      c.Source.Name,
-		},
-		Destination: &agentv1.NetworkEndpoint{
-			Kind:      c.Destination.Kind,
-			Namespace: c.Destination.Namespace,
-			Name:      c.Destination.Name,
-		},
-		Class:            c.Class,
-		TxBytes:          c.TxBytes,
-		RxBytes:          c.RxBytes,
-		EgressCostHourly: c.EgressCostHourly,
 	}
 }
