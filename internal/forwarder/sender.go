@@ -13,7 +13,6 @@ import (
 // Forwarder abstracts sending reports to a remote collector.
 type Forwarder interface {
 	Send(ctx context.Context, report AgentReport) error
-	SendBatch(ctx context.Context, reports []AgentReport) error
 	Close() error
 }
 
@@ -71,47 +70,6 @@ func (s *HTTPSender) Send(ctx context.Context, report AgentReport) error {
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return fmt.Errorf("send report: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("remote endpoint returned status %d", resp.StatusCode)
-	}
-	return nil
-}
-
-// SendBatch POSTs a list of reports to the remote endpoint.
-func (s *HTTPSender) SendBatch(ctx context.Context, reports []AgentReport) error {
-	if s == nil || s.endpoint == "" {
-		return nil
-	}
-	if len(reports) == 0 {
-		return nil
-	}
-	payload := map[string]any{"reports": reports}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal batch: %w", err)
-	}
-	payloadReader, err := s.wrap(body)
-	if err != nil {
-		return fmt.Errorf("encode batch: %w", err)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, payloadReader)
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if s.gzip {
-		req.Header.Set("Content-Encoding", "gzip")
-	}
-	if s.authToken != "" {
-		req.Header.Set("Authorization", "Bearer "+s.authToken)
-	}
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("send batch: %w", err)
 	}
 	defer func() {
 		_ = resp.Body.Close()

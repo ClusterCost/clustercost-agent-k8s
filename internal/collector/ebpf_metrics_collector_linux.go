@@ -6,9 +6,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -29,10 +29,16 @@ type ebpfMetricsCollector struct {
 	mu       sync.Mutex
 	usageMap *ebpf.Map
 	last     map[uint64]metricStats
-	lastTime time.Time
-	cache    map[string]uint64
+
+	// Cache mapping from Pod Key (ns/name) -> Cgroup Info
+	cache    map[string]cgroupInfo
 	cacheAt  time.Time
 	cacheTTL time.Duration
+}
+
+type cgroupInfo struct {
+	Inode uint64
+	Path  string
 }
 
 type metricKey struct {
@@ -40,8 +46,11 @@ type metricKey struct {
 }
 
 type metricStats struct {
-	CPUTimeNS   uint64
-	MemoryBytes uint64
+	CPUUserNs       uint64
+	CPUKernelNs     uint64
+	CPURunDelayNs   uint64
+	PageFaultsMajor uint64
+	MemoryRSSBytes  uint64 // Assuming BPF could have it, or we fill it manually
 }
 
 // newEBPFMetricsCollector reads a pinned eBPF map of cgroup stats.
@@ -59,7 +68,7 @@ func newEBPFMetricsCollector(cfg config.MetricsConfig, logger *slog.Logger) PodM
 		cgroupRoot: cgroupRoot,
 		logger:     logger,
 		last:       map[uint64]metricStats{},
-		cache:      map[string]uint64{},
+		cache:      map[string]cgroupInfo{},
 		cacheTTL:   30 * time.Second,
 	}
 }
@@ -72,54 +81,78 @@ func (c *ebpfMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*co
 		return nil, err
 	}
 
-	podCgroups, err := c.mapPodCgroupIDsCached(pods)
+	podCgroups, err := c.mapPodCgroupsCached(pods)
 	if err != nil {
 		return nil, err
 	}
 
-	lookup := make(map[uint64]string, len(podCgroups))
-	for key, cgID := range podCgroups {
-		lookup[cgID] = key
+	// Reverse lookup: Inode -> Pod Key
+	inodeToPod := make(map[uint64]string, len(podCgroups))
+	for key, info := range podCgroups {
+		inodeToPod[info.Inode] = key
 	}
 
-	now := time.Now()
-	elapsed := now.Sub(c.lastTime)
-	firstSample := c.lastTime.IsZero()
-	c.lastTime = now
-	elapsedNS := elapsed.Nanoseconds()
-	if elapsedNS <= 0 {
-		elapsedNS = 1
-	}
+	result := make(map[string]kube.PodUsage, len(pods))
 
-	result := map[string]kube.PodUsage{}
+	// Pre-fill result map with zero usage so we include all running pods?
+	// Or just those we find stats for.
+
+	// Iterate map to get aggregated CPU/Fault stats
 	iter := c.usageMap.Iterate()
 	var key metricKey
 	var stats metricStats
 	for iter.Next(&key, &stats) {
-		podKey, ok := lookup[key.CgroupID]
+		podKey, ok := inodeToPod[key.CgroupID]
 		if !ok {
 			continue
 		}
-		last := c.last[key.CgroupID]
+
+		// We track last but don't strictly usage it for diff if sending counters
 		c.last[key.CgroupID] = stats
 
-		var cpuMilli int64
-		if !firstSample {
-			deltaCPU := diffUint64Metrics(stats.CPUTimeNS, last.CPUTimeNS)
-			cpuMilli = int64(float64(deltaCPU) / float64(elapsedNS) * 1000)
-			if cpuMilli < 0 {
-				cpuMilli = 0
-			}
-		}
-		result[podKey] = kube.PodUsage{
-			CPUUsageMilli:    cpuMilli,
-			MemoryUsageBytes: safeInt64FromUint64(stats.MemoryBytes),
-		}
+		usage := result[podKey]
+
+		// CPU & Faults are counters (deltas accumulated).
+		// We want total since start? Or delta since last report?
+		// The Agent buffers for 10s. The aggregator likely expects "Usage during window" or "Total usage counter"?
+		// Spec: "CPU Usage: Total nanoseconds/cycles...". Usually implies counter.
+		// "Throughput: Total bytes_sent".
+		// But in `builder.go` we just assign.
+		// If we assign counters, the aggregator can compute rate.
+		// `Sched_stat_runtime` is cumulative. `utime` is cumulative.
+		// So we can send Cumulative values.
+		// BPF map stores Cumulative (it adds deltas to a counter).
+		// So `stats.CPUUserNs` is cumulative from map creation/agent start.
+		// Actually BPF map persists?
+		// "Stateless... buffers events for 10s".
+		// Agent just reports what's in the map.
+		// Aggregator calc rates.
+
+		usage.CPUUsageUserNs = stats.CPUUserNs
+		usage.CPUUsageKernelNs = stats.CPUKernelNs
+		usage.CPUThrottlingNs = stats.CPURunDelayNs
+		usage.MemoryPageFaults = stats.PageFaultsMajor
+
+		result[podKey] = usage
 	}
 
 	if err := iter.Err(); err != nil {
 		return result, fmt.Errorf("iterate eBPF metrics map: %w", err)
 	}
+
+	// Fill RSS from cgroup files (Userspace)
+	for podKey, info := range podCgroups {
+		usage := result[podKey]
+		rss, err := readCgroupMemory(info.Path)
+		if err == nil {
+			usage.MemoryRSS = rss
+		}
+
+		// If we had no BPF entry (idle pod?), usage is 0 counters.
+		// But we have RSS.
+		result[podKey] = usage
+	}
+
 	return result, nil
 }
 
@@ -135,19 +168,20 @@ func (c *ebpfMetricsCollector) ensureMap() error {
 	return nil
 }
 
-func mapPodCgroupIDs(cgroupRoot string, pods []*corev1.Pod) (map[string]uint64, error) {
+func mapPodCgroups(cgroupRoot string, pods []*corev1.Pod) (map[string]cgroupInfo, error) {
 	uidTokens := make(map[string]string, len(pods))
 	for _, pod := range pods {
 		if pod == nil || pod.UID == "" {
 			continue
 		}
 		uid := string(pod.UID)
+		// Match typical k8s cgroup naming patterns
 		token := "pod" + strings.ReplaceAll(uid, "-", "_")
 		uidTokens[token] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 		uidTokens["pod"+uid] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 	}
 
-	result := map[string]uint64{}
+	result := map[string]cgroupInfo{}
 	if len(uidTokens) == 0 {
 		return result, nil
 	}
@@ -168,7 +202,7 @@ func mapPodCgroupIDs(cgroupRoot string, pods []*corev1.Pod) (map[string]uint64, 
 				continue
 			}
 			if inode, ok := cgroupInode(path); ok {
-				result[podKey] = inode
+				result[podKey] = cgroupInfo{Inode: inode, Path: path}
 			}
 		}
 		return nil
@@ -179,10 +213,10 @@ func mapPodCgroupIDs(cgroupRoot string, pods []*corev1.Pod) (map[string]uint64, 
 	return result, nil
 }
 
-func (c *ebpfMetricsCollector) mapPodCgroupIDsCached(pods []*corev1.Pod) (map[string]uint64, error) {
+func (c *ebpfMetricsCollector) mapPodCgroupsCached(pods []*corev1.Pod) (map[string]cgroupInfo, error) {
 	now := time.Now()
 	if now.Sub(c.cacheAt) >= c.cacheTTL {
-		cache, err := mapPodCgroupIDs(c.cgroupRoot, pods)
+		cache, err := mapPodCgroups(c.cgroupRoot, pods)
 		if err != nil {
 			return cache, err
 		}
@@ -190,14 +224,14 @@ func (c *ebpfMetricsCollector) mapPodCgroupIDsCached(pods []*corev1.Pod) (map[st
 		c.cacheAt = now
 		return cache, nil
 	}
-	result := make(map[string]uint64, len(pods))
+	result := make(map[string]cgroupInfo, len(pods))
 	for _, pod := range pods {
 		if pod == nil || pod.UID == "" {
 			continue
 		}
 		key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-		if inode, ok := c.cache[key]; ok {
-			result[key] = inode
+		if info, ok := c.cache[key]; ok {
+			result[key] = info
 		}
 	}
 	return result, nil
@@ -215,16 +249,13 @@ func cgroupInode(path string) (uint64, bool) {
 	return stat.Ino, true
 }
 
-func diffUint64Metrics(current, previous uint64) uint64 {
-	if current >= previous {
-		return current - previous
+func readCgroupMemory(cgroupPath string) (uint64, error) {
+	// Try cgroup v2 memory.current
+	// Or memory.stat for anon + file
+	data, err := os.ReadFile(filepath.Join(cgroupPath, "memory.current"))
+	if err != nil {
+		return 0, err
 	}
-	return current
-}
-
-func safeInt64FromUint64(value uint64) int64 {
-	if value > math.MaxInt64 {
-		return math.MaxInt64
-	}
-	return int64(value)
+	val := strings.TrimSpace(string(data))
+	return strconv.ParseUint(val, 10, 64)
 }

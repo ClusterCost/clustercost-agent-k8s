@@ -13,6 +13,16 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
+// GetMetricsMap returns the metrics map if loaded.
+func (m *Manager) GetMetricsMap() *ebpf.Map {
+	for _, obj := range m.objs {
+		if mp := obj.Maps["clustercost_metrics"]; mp != nil {
+			return mp
+		}
+	}
+	return nil
+}
+
 // Manager keeps eBPF programs and links alive for the agent.
 type Manager struct {
 	logger *slog.Logger

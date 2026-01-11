@@ -1,8 +1,9 @@
 package kube
 
 import (
-	"k8s.io/apimachinery/pkg/types"
 	"time"
+
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // PodContainer contains a subset of container resource specifications.
@@ -49,18 +50,33 @@ type Namespace struct {
 	Labels map[string]string
 }
 
-// PodUsage details actual usage metrics collected from the metrics server.
+// PodUsage details actual usage metrics collected from eBPF.
 type PodUsage struct {
-	CPUUsageMilli    int64
-	MemoryUsageBytes int64
+	// CPU
+	CPUUsageUserNs   uint64
+	CPUUsageKernelNs uint64
+	CPUThrottlingNs  uint64
+
+	// Memory
+	MemoryRSS        uint64
+	MemoryPageFaults uint64
+
+	// Storage
+	StorageReadBytes    uint64
+	StorageWriteBytes   uint64
+	StorageReadOps      uint64
+	StorageWriteOps     uint64
+	StorageTotalLatency uint64
 }
 
 // PodNetworkUsage captures per-pod network usage and classification.
 type PodNetworkUsage struct {
-	TxBytes        uint64
-	RxBytes        uint64
-	TxBytesByClass map[string]uint64
-	RxBytesByClass map[string]uint64
+	TxBytes uint64
+	RxBytes uint64
+	// Categorized Egress
+	EgressPublicBytes   uint64
+	EgressCrossAZBytes  uint64
+	EgressInternalBytes uint64
 }
 
 // ClusterSnapshot is a point-in-time capture of the cluster state relevant to cost.

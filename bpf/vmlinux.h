@@ -358,6 +358,10 @@ struct thread_struct {
 
 #endif
 
+struct sched_info {
+	u64 run_delay;
+};
+
 struct task_struct {
     struct thread_info thread_info;
     unsigned int flags;
@@ -372,6 +376,10 @@ struct task_struct {
     u64 start_time;
     u64 start_boottime;
     u64 real_start_time;
+    u64 utime;
+    u64 stime;
+    u64 maj_flt;
+    struct sched_info sched_info;
     const struct cred *real_cred;
     const struct cred *cred;
     char comm[16];

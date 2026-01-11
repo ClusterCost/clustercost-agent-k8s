@@ -2,93 +2,55 @@ package snapshot
 
 import "time"
 
-// NamespaceCostRecord is the namespace-level payload required by the backend.
-type NamespaceCostRecord struct {
-	ClusterID          string            `json:"clusterId"`
-	Namespace          string            `json:"namespace"`
-	HourlyCost         float64           `json:"hourlyCost"`
-	PodCount           int               `json:"podCount"`
-	CPURequestMilli    int64             `json:"cpuRequestMilli"`
-	MemoryRequestBytes int64             `json:"memoryRequestBytes"`
-	CPUUsageMilli      int64             `json:"cpuUsageMilli"`
-	MemoryUsageBytes   int64             `json:"memoryUsageBytes"`
-	NetworkTxBytes     uint64            `json:"networkTxBytes"`
-	NetworkRxBytes     uint64            `json:"networkRxBytes"`
-	NetworkEgressCost  float64           `json:"networkEgressCostHourly"`
-	Labels             map[string]string `json:"labels,omitempty"`
-	Environment        string            `json:"environment,omitempty"`
+// Snapshot maps the agent's view of the world at a point in time.
+type Snapshot struct {
+	Timestamp time.Time   `json:"timestamp"`
+	Pods      []PodMetric `json:"pods"`
 }
 
-// NodeCostRecord captures node pricing and utilization.
-type NodeCostRecord struct {
-	ClusterID              string            `json:"clusterId"`
-	NodeName               string            `json:"nodeName"`
-	HourlyCost             float64           `json:"hourlyCost"`
-	CPUUsagePercent        float64           `json:"cpuUsagePercent"`
-	MemoryUsagePercent     float64           `json:"memoryUsagePercent"`
-	CPUAllocatableMilli    int64             `json:"cpuAllocatableMilli"`
-	MemoryAllocatableBytes int64             `json:"memoryAllocatableBytes"`
-	PodCount               int               `json:"podCount"`
-	Status                 string            `json:"status"`
-	IsUnderPressure        bool              `json:"isUnderPressure"`
-	InstanceType           string            `json:"instanceType"`
-	Labels                 map[string]string `json:"labels,omitempty"`
-	Taints                 []string          `json:"taints,omitempty"`
-}
+// PodMetric captures telemetry for a single pod.
+type PodMetric struct {
+	// Identity
+	PodUID      string `json:"podUid"`
+	ContainerID string `json:"containerId"`
+	PID         uint32 `json:"pid"`
+	Namespace   string `json:"namespace"`
+	PodName     string `json:"podName"`
 
-// ResourceSnapshot stores global cluster totals.
-type ResourceSnapshot struct {
-	ClusterID               string  `json:"clusterId"`
-	CPUUsageMilliTotal      int64   `json:"cpuUsageMilliTotal"`
-	CPURequestMilliTotal    int64   `json:"cpuRequestMilliTotal"`
-	MemoryUsageBytesTotal   int64   `json:"memoryUsageBytesTotal"`
-	MemoryRequestBytesTotal int64   `json:"memoryRequestBytesTotal"`
-	TotalNodeHourlyCost     float64 `json:"totalNodeHourlyCost"`
-	NetworkTxBytesTotal     uint64  `json:"networkTxBytesTotal"`
-	NetworkRxBytesTotal     uint64  `json:"networkRxBytesTotal"`
-	NetworkEgressCostTotal  float64 `json:"networkEgressCostHourlyTotal"`
-}
-
-// NetworkClassTotals summarizes traffic and cost for a class.
-type NetworkClassTotals struct {
-	Class            string  `json:"class"`
-	TxBytes          uint64  `json:"txBytes"`
-	RxBytes          uint64  `json:"rxBytes"`
-	EgressCostHourly float64 `json:"egressCostHourly"`
-}
-
-// PodRecord captures all metadata, resource usage, and network usage for a single pod.
-type PodRecord struct {
-	// Metadata
-	Namespace   string            `json:"namespace"`
-	Pod         string            `json:"pod"`
-	Node        string            `json:"node"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Environment string            `json:"environment,omitempty"`
-	OwnerKind   string            `json:"ownerKind,omitempty"`
-	OwnerName   string            `json:"ownerName,omitempty"`
-
-	// Resources
-	CPURequestMilli    int64   `json:"cpuRequestMilli"`
-	CPUUsageMilli      int64   `json:"cpuUsageMilli"`
-	MemoryRequestBytes int64   `json:"memoryRequestBytes"`
-	MemoryUsageBytes   int64   `json:"memoryUsageBytes"`
-	ResourceHourlyCost float64 `json:"resourceHourlyCost"`
+	// Compute
+	Cpu    CpuMetrics    `json:"cpu"`
+	Memory MemoryMetrics `json:"memory"`
 
 	// Network
-	NetworkTxBytes          uint64               `json:"networkTxBytes"`
-	NetworkRxBytes          uint64               `json:"networkRxBytes"`
-	NetworkEgressCostHourly float64              `json:"networkEgressCostHourly"`
-	NetworkByClass          []NetworkClassTotals `json:"networkByClass,omitempty"`
+	Network NetworkMetrics `json:"network"`
 
-	// Total
-	TotalHourlyCost float64 `json:"totalHourlyCost"`
+	// Storage
+	Storage StorageMetrics `json:"storage"`
 }
 
-// Snapshot is the unit exchanged between the builder and the HTTP API.
-type Snapshot struct {
-	Timestamp time.Time        `json:"timestamp"`
-	Node      *NodeCostRecord  `json:"node"`
-	Pods      []PodRecord      `json:"pods"`
-	Resources ResourceSnapshot `json:"resources"`
+type CpuMetrics struct {
+	UsageUser   uint64 `json:"usageUserNs"`
+	UsageKernel uint64 `json:"usageKernelNs"`
+	Throttling  uint64 `json:"throttlingNs"`
+}
+
+type MemoryMetrics struct {
+	RSS        uint64 `json:"rssBytes"`
+	PageFaults uint64 `json:"pageFaultsMajor"`
+}
+
+type NetworkMetrics struct {
+	BytesSent      uint64 `json:"bytesSent"`
+	BytesReceived  uint64 `json:"bytesReceived"`
+	EgressPublic   uint64 `json:"egressPublicBytes"`
+	EgressCrossAZ  uint64 `json:"egressCrossAZBytes"`
+	EgressInternal uint64 `json:"egressInternalBytes"`
+}
+
+type StorageMetrics struct {
+	ReadBytes    uint64 `json:"readBytes"`
+	WriteBytes   uint64 `json:"writeBytes"`
+	ReadOps      uint64 `json:"readOps"`
+	WriteOps     uint64 `json:"writeOps"`
+	TotalLatency uint64 `json:"totalLatencyNs"`
 }

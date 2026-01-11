@@ -37,8 +37,6 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/agent/v1/overview", h.overview)
 	mux.HandleFunc("/agent/v1/health", h.health)
 	mux.HandleFunc("/agent/v1/pods", h.pods)
-	mux.HandleFunc("/agent/v1/nodes", h.nodes)
-	mux.HandleFunc("/agent/v1/resources", h.resources)
 	mux.HandleFunc("/api/debug/report", h.debugReport)
 }
 
@@ -105,34 +103,6 @@ func (h *Handler) pods(w http.ResponseWriter, r *http.Request) {
 	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
 }
 
-func (h *Handler) nodes(w http.ResponseWriter, r *http.Request) {
-	if snap, ok := h.store.Latest(); ok {
-		items := []snapshot.NodeCostRecord{}
-		if snap.Node != nil {
-			items = append(items, *snap.Node)
-		}
-		payload := map[string]any{
-			"items":     items,
-			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
-		}
-		respondJSON(w, http.StatusOK, payload)
-		return
-	}
-	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-}
-
-func (h *Handler) resources(w http.ResponseWriter, r *http.Request) {
-	if snap, ok := h.store.Latest(); ok {
-		payload := map[string]any{
-			"snapshot":  snap.Resources,
-			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
-		}
-		respondJSON(w, http.StatusOK, payload)
-		return
-	}
-	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-}
-
 func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
 	snap, ok := h.store.Latest()
 	if !ok {
@@ -141,7 +111,7 @@ func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	report := forwarder.AgentReport{
-		ClusterID:   snap.Resources.ClusterID,
+		ClusterID:   h.clusterName, // Previously snap.Resources.ClusterID but we lost that.
 		ClusterName: h.clusterName,
 		NodeName:    "debug-manual-pull",
 		AgentID:     h.agentID,

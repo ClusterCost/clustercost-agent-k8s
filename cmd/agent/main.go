@@ -84,7 +84,7 @@ func main() {
 		}
 	}
 
-	clusterRegion := cfg.Pricing.Region
+	clusterRegion := cfg.Pricing.Region // Keeping config field for compatibility, but not using logic
 	regionCtx, cancelRegion := context.WithTimeout(ctx, 10*time.Second)
 	if detectedRegion, err := kube.DetectClusterRegion(regionCtx, kubeClient.Kubernetes); err == nil && detectedRegion != "" {
 		clusterRegion = detectedRegion
@@ -117,6 +117,7 @@ func main() {
 		logger.Info("running in node scope", slog.String("nodeName", nodeName))
 	} else {
 		if cfg.Metrics.Enabled || cfg.Network.Enabled {
+			// eBPF usually requires node-scope to map pids
 			logger.Error("node name is required for eBPF collectors; set NODE_NAME or --node-name")
 			os.Exit(1)
 		}
@@ -156,6 +157,7 @@ func main() {
 		Enabled:    cfg.Network.Enabled,
 		BPFMapPath: cfg.Network.BPFMapPath,
 	}, logger)
+
 	var sender forwarder.Forwarder
 	var queue *forwarder.Queue
 	if cfg.Remote.Enabled && cfg.Remote.EndpointURL != "" {
@@ -164,11 +166,7 @@ func main() {
 			sender, err = forwarder.NewGRPCSender(ctx, cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout)
 			if err != nil {
 				logger.Error("failed to create grpc sender", slog.String("error", err.Error()))
-				// We don't exit here, queue will just retry until sender works?
-				// Actually if NewGRPCSender fails (dial fails), we might want to retry or just log.
-				// However, NewGRPCSender with grpc.NewClient is non-blocking usually, so it shouldn't fail unless config invalid.
 			} else {
-				// Ensure we close the connection on shutdown
 				go func() {
 					<-ctx.Done()
 					if err := sender.Close(); err != nil {
@@ -186,31 +184,9 @@ func main() {
 			go queue.Run(ctx)
 		}
 	}
-	classifier := snapshot.NewEnvironmentClassifier(snapshot.ClassifierConfig{
-		LabelKeys:              cfg.Environment.LabelKeys,
-		ProductionLabelValues:  cfg.Environment.ProductionLabelValues,
-		NonProdLabelValues:     cfg.Environment.NonProdLabelValues,
-		SystemLabelValues:      cfg.Environment.SystemLabelValues,
-		ProductionNameContains: cfg.Environment.ProductionNameContains,
-		SystemNamespaces:       cfg.Environment.SystemNamespaces,
-	})
-	// Merge region-specific AWS prices if available
-	instancePrices := cfg.Pricing.InstancePrices
-	if cfg.Pricing.Provider == "aws" || cfg.Pricing.Provider == "" {
-		if regionPrices, ok := cfg.Pricing.AWS.NodePrices[clusterRegion]; ok {
-			if instancePrices == nil {
-				instancePrices = make(map[string]float64)
-			}
-			for k, v := range regionPrices {
-				instancePrices[k] = v
-			}
-			logger.Info("loaded aws instance prices", slog.String("region", clusterRegion), slog.Int("count", len(regionPrices)))
-		}
-	}
 
-	priceLookup := snapshot.NewNodePriceLookup(instancePrices, cfg.Pricing.DefaultNodeHourlyUSD)
-	networkPriceLookup := snapshot.NewNetworkPriceLookup(cfg.Pricing.Network.DefaultEgressGiBPriceUSD, cfg.Pricing.Network.EgressGiBPricesUSD)
-	builder := snapshot.NewBuilder(clusterID, classifier, priceLookup, networkPriceLookup, cfg.Network.Detailed)
+	// Simplified Builder, no pricing/classification
+	builder := snapshot.NewBuilder(clusterID)
 	store := snapshot.NewStore()
 
 	agentID := string(uuid.NewUUID())
@@ -269,9 +245,16 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 		return err
 	}
 
+	var availabilityZone string
 	if nodeName != "" {
 		nodes = filterNodes(nodes, nodeName)
 		pods = filterPods(pods, nodeName)
+		if len(nodes) > 0 {
+			availabilityZone = nodes[0].Labels["topology.kubernetes.io/zone"]
+			if availabilityZone == "" {
+				availabilityZone = nodes[0].Labels["failure-domain.beta.kubernetes.io/zone"]
+			}
+		}
 	}
 
 	metricsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -295,13 +278,14 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 
 	if queue != nil {
 		report := forwarder.AgentReport{
-			ClusterID:   clusterID,
-			ClusterName: clusterName,
-			NodeName:    nodeName,
-			AgentID:     agentID,
-			Version:     version,
-			Timestamp:   time.Now().UTC(),
-			Snapshot:    store.LatestSnapshot(),
+			ClusterID:        clusterID,
+			ClusterName:      clusterName,
+			NodeName:         nodeName,
+			AvailabilityZone: availabilityZone,
+			AgentID:          agentID,
+			Version:          version,
+			Timestamp:        time.Now().UTC(),
+			Snapshot:         store.LatestSnapshot(),
 		}
 		if err := queue.Enqueue(report); err != nil {
 			logger.Warn("queue enqueue failed", slog.String("error", err.Error()))

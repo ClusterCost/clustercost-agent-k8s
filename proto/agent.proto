@@ -5,25 +5,18 @@ package agent.v1;
 option go_package = "clustercost-agent-k8s/internal/proto/agent/v1;agentv1";
 
 service Collector {
-  // Report sends a single agent report to the collector.
+  // Report sends a batch of metrics from the agent to the aggregator.
   rpc Report(ReportRequest) returns (ReportResponse);
-  // ReportBatch sends multiple agent reports in a single request.
-  rpc ReportBatch(ReportBatchRequest) returns (ReportResponse);
 }
 
 message ReportRequest {
-  string cluster_id = 1;
-  string cluster_name = 2;
+  string agent_id = 1;
+  string cluster_id = 2;
   string node_name = 3;
-  string agent_id = 4;
-  string version = 5;
-  int64 timestamp_seconds = 6;
-  
-  Snapshot snapshot = 7;
-}
+  string availability_zone = 4;
+  int64 timestamp_seconds = 5;
 
-message ReportBatchRequest {
-  repeated ReportRequest reports = 1;
+  repeated PodMetric pods = 6;
 }
 
 message ReportResponse {
@@ -31,71 +24,66 @@ message ReportResponse {
   string error_message = 2;
 }
 
-message Snapshot {
-  int64 timestamp_seconds = 1;
-  NodeCostRecord node = 2;
-  repeated PodRecord pods = 3;
-  ResourceSnapshot resources = 4;
+message PodMetric {
+  // Metadata Context
+  string pod_uid = 1;
+  string container_id = 2;
+  uint32 pid_tgid = 3;
+  
+  // Include namespace/pod name to help aggregator if K8s API is lagging, 
+  // but strictly spec just says identifiers. 
+  // "The agent must resolve destination IPs..." -> Agent does heavy lifting for network.
+  // Let's keep namespace/name as they are cheap and useful.
+  string namespace = 4;
+  string pod_name = 5;
+
+  // Compute Performance
+  CpuMetrics cpu = 6;
+  MemoryMetrics memory = 7;
+
+  // Cost-Aware Network
+  NetworkMetrics network = 8;
+
+  // Storage I/O
+  StorageMetrics storage = 9;
 }
 
-message PodRecord {
-  // Metadata
-  string namespace = 1;
-  string pod = 2;
-  string node = 3;
-  map<string, string> labels = 4;
-  string environment = 5;
-  string owner_kind = 6;
-  string owner_name = 7;
-
-  // Resources
-  int64 cpu_request_milli = 8;
-  int64 cpu_usage_milli = 9;
-  int64 memory_request_bytes = 10;
-  int64 memory_usage_bytes = 11;
-  double resource_hourly_cost = 12;
-
-  // Network
-  uint64 network_tx_bytes = 13;
-  uint64 network_rx_bytes = 14;
-  double network_egress_cost_hourly = 15;
-  repeated NetworkClassTotals network_by_class = 16;
-
-  // Total
-  double total_hourly_cost = 17;
+message CpuMetrics {
+  // Total nanoseconds in user space
+  uint64 usage_user_ns = 1;
+  // Total nanoseconds in kernel space
+  uint64 usage_kernel_ns = 2;
+  // Total run_delay (throttling) in nanoseconds
+  uint64 throttling_ns = 3;
 }
 
-message NodeCostRecord {
-  string cluster_id = 1;
-  string node_name = 2;
-  int64 cpu_allocatable_milli = 3;
-  int64 memory_allocatable_bytes = 4;
-  map<string, string> labels = 5;
-  repeated string taints = 6;
-  string instance_type = 7;
-  string status = 8;
-  bool is_under_pressure = 9;
-  double hourly_cost = 10;
-  double cpu_usage_percent = 11;
-  double memory_usage_percent = 12;
-  int64 pod_count = 13;
+message MemoryMetrics {
+  // Resident Set Size (bytes)
+  uint64 rss_bytes = 1;
+  // Major page faults
+  uint64 page_faults_major = 2;
 }
 
-message ResourceSnapshot {
-  string cluster_id = 1;
-  int64 cpu_usage_milli_total = 2;
-  int64 cpu_request_milli_total = 3;
-  int64 memory_usage_bytes_total = 4;
-  int64 memory_request_bytes_total = 5;
-  double total_node_hourly_cost = 6;
-  uint64 network_tx_bytes_total = 7;
-  uint64 network_rx_bytes_total = 8;
-  double network_egress_cost_total = 9;
+message NetworkMetrics {
+  // Throughput
+  uint64 bytes_sent = 1;
+  uint64 bytes_received = 2;
+
+  // Traffic Categorization (Egress Analyzer)
+  uint64 egress_public_bytes = 3;
+  uint64 egress_cross_az_bytes = 4;
+  uint64 egress_internal_bytes = 5;
 }
 
-message NetworkClassTotals {
-  string class = 1;
-  uint64 tx_bytes = 2;
-  uint64 rx_bytes = 3;
-  double egress_cost_hourly = 4;
+message StorageMetrics {
+  // Throughput
+  uint64 read_bytes = 1;
+  uint64 write_bytes = 2;
+  
+  // IOPS
+  uint64 read_ops = 3;
+  uint64 write_ops = 4;
+
+  // Latency
+  uint64 total_latency_ns = 5; 
 }

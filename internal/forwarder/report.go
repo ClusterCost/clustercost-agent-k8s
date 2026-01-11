@@ -8,11 +8,12 @@ import (
 
 // AgentReport is the payload forwarded to the central agent.
 type AgentReport struct {
-	ClusterID   string            `json:"clusterId"`
-	ClusterName string            `json:"clusterName"`
-	NodeName    string            `json:"nodeName"`
-	AgentID     string            `json:"agentId"`
-	Version     string            `json:"version"`
-	Timestamp   time.Time         `json:"timestamp"`
-	Snapshot    snapshot.Snapshot `json:"snapshot"`
+	ClusterID        string            `json:"clusterId"`
+	ClusterName      string            `json:"clusterName"`
+	NodeName         string            `json:"nodeName"`
+	AvailabilityZone string            `json:"availabilityZone"`
+	AgentID          string            `json:"agentId"`
+	Version          string            `json:"version"`
+	Timestamp        time.Time         `json:"timestamp"`
+	Snapshot         snapshot.Snapshot `json:"snapshot"`
 }

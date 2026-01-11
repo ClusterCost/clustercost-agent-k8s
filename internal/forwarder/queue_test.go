@@ -74,11 +74,11 @@ func TestBackoffDuration(t *testing.T) {
 func TestQueueFlushMemorySendsBatch(t *testing.T) {
 	var gotCount int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string][]AgentReport
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		var report AgentReport
+		if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		gotCount = len(payload["reports"])
+		gotCount++
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -97,7 +97,7 @@ func TestQueueFlushMemorySendsBatch(t *testing.T) {
 
 	queue.flushMemory(context.Background())
 	if gotCount != 2 {
-		t.Fatalf("expected 2 reports in batch, got %d", gotCount)
+		t.Fatalf("expected 2 reports sent individually, got %d", gotCount)
 	}
 }
 

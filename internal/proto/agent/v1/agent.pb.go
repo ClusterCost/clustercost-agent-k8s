@@ -23,13 +23,12 @@ const (
 
 type ReportRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
-	ClusterId        string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	ClusterName      string                 `protobuf:"bytes,2,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
+	AgentId          string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	ClusterId        string                 `protobuf:"bytes,2,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 	NodeName         string                 `protobuf:"bytes,3,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
-	AgentId          string                 `protobuf:"bytes,4,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
-	Version          string                 `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
-	TimestampSeconds int64                  `protobuf:"varint,6,opt,name=timestamp_seconds,json=timestampSeconds,proto3" json:"timestamp_seconds,omitempty"`
-	Snapshot         *Snapshot              `protobuf:"bytes,7,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	AvailabilityZone string                 `protobuf:"bytes,4,opt,name=availability_zone,json=availabilityZone,proto3" json:"availability_zone,omitempty"`
+	TimestampSeconds int64                  `protobuf:"varint,5,opt,name=timestamp_seconds,json=timestampSeconds,proto3" json:"timestamp_seconds,omitempty"`
+	Pods             []*PodMetric           `protobuf:"bytes,6,rep,name=pods,proto3" json:"pods,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -64,16 +63,16 @@ func (*ReportRequest) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ReportRequest) GetClusterId() string {
+func (x *ReportRequest) GetAgentId() string {
 	if x != nil {
-		return x.ClusterId
+		return x.AgentId
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetClusterName() string {
+func (x *ReportRequest) GetClusterId() string {
 	if x != nil {
-		return x.ClusterName
+		return x.ClusterId
 	}
 	return ""
 }
@@ -85,16 +84,9 @@ func (x *ReportRequest) GetNodeName() string {
 	return ""
 }
 
-func (x *ReportRequest) GetAgentId() string {
+func (x *ReportRequest) GetAvailabilityZone() string {
 	if x != nil {
-		return x.AgentId
-	}
-	return ""
-}
-
-func (x *ReportRequest) GetVersion() string {
-	if x != nil {
-		return x.Version
+		return x.AvailabilityZone
 	}
 	return ""
 }
@@ -106,53 +98,9 @@ func (x *ReportRequest) GetTimestampSeconds() int64 {
 	return 0
 }
 
-func (x *ReportRequest) GetSnapshot() *Snapshot {
+func (x *ReportRequest) GetPods() []*PodMetric {
 	if x != nil {
-		return x.Snapshot
-	}
-	return nil
-}
-
-type ReportBatchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reports       []*ReportRequest       `protobuf:"bytes,1,rep,name=reports,proto3" json:"reports,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ReportBatchRequest) Reset() {
-	*x = ReportBatchRequest{}
-	mi := &file_agent_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ReportBatchRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReportBatchRequest) ProtoMessage() {}
-
-func (x *ReportBatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReportBatchRequest.ProtoReflect.Descriptor instead.
-func (*ReportBatchRequest) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *ReportBatchRequest) GetReports() []*ReportRequest {
-	if x != nil {
-		return x.Reports
+		return x.Pods
 	}
 	return nil
 }
@@ -167,7 +115,7 @@ type ReportResponse struct {
 
 func (x *ReportResponse) Reset() {
 	*x = ReportResponse{}
-	mi := &file_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -179,7 +127,7 @@ func (x *ReportResponse) String() string {
 func (*ReportResponse) ProtoMessage() {}
 
 func (x *ReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -192,7 +140,7 @@ func (x *ReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResponse.ProtoReflect.Descriptor instead.
 func (*ReportResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{2}
+	return file_agent_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ReportResponse) GetAccepted() bool {
@@ -209,31 +157,44 @@ func (x *ReportResponse) GetErrorMessage() string {
 	return ""
 }
 
-type Snapshot struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	TimestampSeconds int64                  `protobuf:"varint,1,opt,name=timestamp_seconds,json=timestampSeconds,proto3" json:"timestamp_seconds,omitempty"`
-	Node             *NodeCostRecord        `protobuf:"bytes,2,opt,name=node,proto3" json:"node,omitempty"`
-	Pods             []*PodRecord           `protobuf:"bytes,3,rep,name=pods,proto3" json:"pods,omitempty"`
-	Resources        *ResourceSnapshot      `protobuf:"bytes,4,opt,name=resources,proto3" json:"resources,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+type PodMetric struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Metadata Context
+	PodUid      string `protobuf:"bytes,1,opt,name=pod_uid,json=podUid,proto3" json:"pod_uid,omitempty"`
+	ContainerId string `protobuf:"bytes,2,opt,name=container_id,json=containerId,proto3" json:"container_id,omitempty"`
+	PidTgid     uint32 `protobuf:"varint,3,opt,name=pid_tgid,json=pidTgid,proto3" json:"pid_tgid,omitempty"`
+	// Include namespace/pod name to help aggregator if K8s API is lagging,
+	// but strictly spec just says identifiers.
+	// "The agent must resolve destination IPs..." -> Agent does heavy lifting for network.
+	// Let's keep namespace/name as they are cheap and useful.
+	Namespace string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	PodName   string `protobuf:"bytes,5,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
+	// Compute Performance
+	Cpu    *CpuMetrics    `protobuf:"bytes,6,opt,name=cpu,proto3" json:"cpu,omitempty"`
+	Memory *MemoryMetrics `protobuf:"bytes,7,opt,name=memory,proto3" json:"memory,omitempty"`
+	// Cost-Aware Network
+	Network *NetworkMetrics `protobuf:"bytes,8,opt,name=network,proto3" json:"network,omitempty"`
+	// Storage I/O
+	Storage       *StorageMetrics `protobuf:"bytes,9,opt,name=storage,proto3" json:"storage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Snapshot) Reset() {
-	*x = Snapshot{}
-	mi := &file_agent_proto_msgTypes[3]
+func (x *PodMetric) Reset() {
+	*x = PodMetric{}
+	mi := &file_agent_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Snapshot) String() string {
+func (x *PodMetric) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Snapshot) ProtoMessage() {}
+func (*PodMetric) ProtoMessage() {}
 
-func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[3]
+func (x *PodMetric) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -244,248 +205,218 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
-func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{3}
+// Deprecated: Use PodMetric.ProtoReflect.Descriptor instead.
+func (*PodMetric) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Snapshot) GetTimestampSeconds() int64 {
+func (x *PodMetric) GetPodUid() string {
 	if x != nil {
-		return x.TimestampSeconds
+		return x.PodUid
+	}
+	return ""
+}
+
+func (x *PodMetric) GetContainerId() string {
+	if x != nil {
+		return x.ContainerId
+	}
+	return ""
+}
+
+func (x *PodMetric) GetPidTgid() uint32 {
+	if x != nil {
+		return x.PidTgid
 	}
 	return 0
 }
 
-func (x *Snapshot) GetNode() *NodeCostRecord {
-	if x != nil {
-		return x.Node
-	}
-	return nil
-}
-
-func (x *Snapshot) GetPods() []*PodRecord {
-	if x != nil {
-		return x.Pods
-	}
-	return nil
-}
-
-func (x *Snapshot) GetResources() *ResourceSnapshot {
-	if x != nil {
-		return x.Resources
-	}
-	return nil
-}
-
-type PodRecord struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Metadata
-	Namespace   string            `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Pod         string            `protobuf:"bytes,2,opt,name=pod,proto3" json:"pod,omitempty"`
-	Node        string            `protobuf:"bytes,3,opt,name=node,proto3" json:"node,omitempty"`
-	Labels      map[string]string `protobuf:"bytes,4,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Environment string            `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
-	OwnerKind   string            `protobuf:"bytes,6,opt,name=owner_kind,json=ownerKind,proto3" json:"owner_kind,omitempty"`
-	OwnerName   string            `protobuf:"bytes,7,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"`
-	// Resources
-	CpuRequestMilli    int64   `protobuf:"varint,8,opt,name=cpu_request_milli,json=cpuRequestMilli,proto3" json:"cpu_request_milli,omitempty"`
-	CpuUsageMilli      int64   `protobuf:"varint,9,opt,name=cpu_usage_milli,json=cpuUsageMilli,proto3" json:"cpu_usage_milli,omitempty"`
-	MemoryRequestBytes int64   `protobuf:"varint,10,opt,name=memory_request_bytes,json=memoryRequestBytes,proto3" json:"memory_request_bytes,omitempty"`
-	MemoryUsageBytes   int64   `protobuf:"varint,11,opt,name=memory_usage_bytes,json=memoryUsageBytes,proto3" json:"memory_usage_bytes,omitempty"`
-	ResourceHourlyCost float64 `protobuf:"fixed64,12,opt,name=resource_hourly_cost,json=resourceHourlyCost,proto3" json:"resource_hourly_cost,omitempty"`
-	// Network
-	NetworkTxBytes          uint64                `protobuf:"varint,13,opt,name=network_tx_bytes,json=networkTxBytes,proto3" json:"network_tx_bytes,omitempty"`
-	NetworkRxBytes          uint64                `protobuf:"varint,14,opt,name=network_rx_bytes,json=networkRxBytes,proto3" json:"network_rx_bytes,omitempty"`
-	NetworkEgressCostHourly float64               `protobuf:"fixed64,15,opt,name=network_egress_cost_hourly,json=networkEgressCostHourly,proto3" json:"network_egress_cost_hourly,omitempty"`
-	NetworkByClass          []*NetworkClassTotals `protobuf:"bytes,16,rep,name=network_by_class,json=networkByClass,proto3" json:"network_by_class,omitempty"`
-	// Total
-	TotalHourlyCost float64 `protobuf:"fixed64,17,opt,name=total_hourly_cost,json=totalHourlyCost,proto3" json:"total_hourly_cost,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *PodRecord) Reset() {
-	*x = PodRecord{}
-	mi := &file_agent_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PodRecord) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PodRecord) ProtoMessage() {}
-
-func (x *PodRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PodRecord.ProtoReflect.Descriptor instead.
-func (*PodRecord) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *PodRecord) GetNamespace() string {
+func (x *PodMetric) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-func (x *PodRecord) GetPod() string {
+func (x *PodMetric) GetPodName() string {
 	if x != nil {
-		return x.Pod
+		return x.PodName
 	}
 	return ""
 }
 
-func (x *PodRecord) GetNode() string {
+func (x *PodMetric) GetCpu() *CpuMetrics {
 	if x != nil {
-		return x.Node
-	}
-	return ""
-}
-
-func (x *PodRecord) GetLabels() map[string]string {
-	if x != nil {
-		return x.Labels
+		return x.Cpu
 	}
 	return nil
 }
 
-func (x *PodRecord) GetEnvironment() string {
+func (x *PodMetric) GetMemory() *MemoryMetrics {
 	if x != nil {
-		return x.Environment
-	}
-	return ""
-}
-
-func (x *PodRecord) GetOwnerKind() string {
-	if x != nil {
-		return x.OwnerKind
-	}
-	return ""
-}
-
-func (x *PodRecord) GetOwnerName() string {
-	if x != nil {
-		return x.OwnerName
-	}
-	return ""
-}
-
-func (x *PodRecord) GetCpuRequestMilli() int64 {
-	if x != nil {
-		return x.CpuRequestMilli
-	}
-	return 0
-}
-
-func (x *PodRecord) GetCpuUsageMilli() int64 {
-	if x != nil {
-		return x.CpuUsageMilli
-	}
-	return 0
-}
-
-func (x *PodRecord) GetMemoryRequestBytes() int64 {
-	if x != nil {
-		return x.MemoryRequestBytes
-	}
-	return 0
-}
-
-func (x *PodRecord) GetMemoryUsageBytes() int64 {
-	if x != nil {
-		return x.MemoryUsageBytes
-	}
-	return 0
-}
-
-func (x *PodRecord) GetResourceHourlyCost() float64 {
-	if x != nil {
-		return x.ResourceHourlyCost
-	}
-	return 0
-}
-
-func (x *PodRecord) GetNetworkTxBytes() uint64 {
-	if x != nil {
-		return x.NetworkTxBytes
-	}
-	return 0
-}
-
-func (x *PodRecord) GetNetworkRxBytes() uint64 {
-	if x != nil {
-		return x.NetworkRxBytes
-	}
-	return 0
-}
-
-func (x *PodRecord) GetNetworkEgressCostHourly() float64 {
-	if x != nil {
-		return x.NetworkEgressCostHourly
-	}
-	return 0
-}
-
-func (x *PodRecord) GetNetworkByClass() []*NetworkClassTotals {
-	if x != nil {
-		return x.NetworkByClass
+		return x.Memory
 	}
 	return nil
 }
 
-func (x *PodRecord) GetTotalHourlyCost() float64 {
+func (x *PodMetric) GetNetwork() *NetworkMetrics {
 	if x != nil {
-		return x.TotalHourlyCost
+		return x.Network
+	}
+	return nil
+}
+
+func (x *PodMetric) GetStorage() *StorageMetrics {
+	if x != nil {
+		return x.Storage
+	}
+	return nil
+}
+
+type CpuMetrics struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Total nanoseconds in user space
+	UsageUserNs uint64 `protobuf:"varint,1,opt,name=usage_user_ns,json=usageUserNs,proto3" json:"usage_user_ns,omitempty"`
+	// Total nanoseconds in kernel space
+	UsageKernelNs uint64 `protobuf:"varint,2,opt,name=usage_kernel_ns,json=usageKernelNs,proto3" json:"usage_kernel_ns,omitempty"`
+	// Total run_delay (throttling) in nanoseconds
+	ThrottlingNs  uint64 `protobuf:"varint,3,opt,name=throttling_ns,json=throttlingNs,proto3" json:"throttling_ns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CpuMetrics) Reset() {
+	*x = CpuMetrics{}
+	mi := &file_agent_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CpuMetrics) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CpuMetrics) ProtoMessage() {}
+
+func (x *CpuMetrics) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CpuMetrics.ProtoReflect.Descriptor instead.
+func (*CpuMetrics) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CpuMetrics) GetUsageUserNs() uint64 {
+	if x != nil {
+		return x.UsageUserNs
 	}
 	return 0
 }
 
-type NodeCostRecord struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	ClusterId              string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	NodeName               string                 `protobuf:"bytes,2,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
-	CpuAllocatableMilli    int64                  `protobuf:"varint,3,opt,name=cpu_allocatable_milli,json=cpuAllocatableMilli,proto3" json:"cpu_allocatable_milli,omitempty"`
-	MemoryAllocatableBytes int64                  `protobuf:"varint,4,opt,name=memory_allocatable_bytes,json=memoryAllocatableBytes,proto3" json:"memory_allocatable_bytes,omitempty"`
-	Labels                 map[string]string      `protobuf:"bytes,5,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Taints                 []string               `protobuf:"bytes,6,rep,name=taints,proto3" json:"taints,omitempty"`
-	InstanceType           string                 `protobuf:"bytes,7,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
-	Status                 string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
-	IsUnderPressure        bool                   `protobuf:"varint,9,opt,name=is_under_pressure,json=isUnderPressure,proto3" json:"is_under_pressure,omitempty"`
-	HourlyCost             float64                `protobuf:"fixed64,10,opt,name=hourly_cost,json=hourlyCost,proto3" json:"hourly_cost,omitempty"`
-	CpuUsagePercent        float64                `protobuf:"fixed64,11,opt,name=cpu_usage_percent,json=cpuUsagePercent,proto3" json:"cpu_usage_percent,omitempty"`
-	MemoryUsagePercent     float64                `protobuf:"fixed64,12,opt,name=memory_usage_percent,json=memoryUsagePercent,proto3" json:"memory_usage_percent,omitempty"`
-	PodCount               int64                  `protobuf:"varint,13,opt,name=pod_count,json=podCount,proto3" json:"pod_count,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+func (x *CpuMetrics) GetUsageKernelNs() uint64 {
+	if x != nil {
+		return x.UsageKernelNs
+	}
+	return 0
 }
 
-func (x *NodeCostRecord) Reset() {
-	*x = NodeCostRecord{}
+func (x *CpuMetrics) GetThrottlingNs() uint64 {
+	if x != nil {
+		return x.ThrottlingNs
+	}
+	return 0
+}
+
+type MemoryMetrics struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Resident Set Size (bytes)
+	RssBytes uint64 `protobuf:"varint,1,opt,name=rss_bytes,json=rssBytes,proto3" json:"rss_bytes,omitempty"`
+	// Major page faults
+	PageFaultsMajor uint64 `protobuf:"varint,2,opt,name=page_faults_major,json=pageFaultsMajor,proto3" json:"page_faults_major,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *MemoryMetrics) Reset() {
+	*x = MemoryMetrics{}
+	mi := &file_agent_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MemoryMetrics) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MemoryMetrics) ProtoMessage() {}
+
+func (x *MemoryMetrics) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MemoryMetrics.ProtoReflect.Descriptor instead.
+func (*MemoryMetrics) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *MemoryMetrics) GetRssBytes() uint64 {
+	if x != nil {
+		return x.RssBytes
+	}
+	return 0
+}
+
+func (x *MemoryMetrics) GetPageFaultsMajor() uint64 {
+	if x != nil {
+		return x.PageFaultsMajor
+	}
+	return 0
+}
+
+type NetworkMetrics struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Throughput
+	BytesSent     uint64 `protobuf:"varint,1,opt,name=bytes_sent,json=bytesSent,proto3" json:"bytes_sent,omitempty"`
+	BytesReceived uint64 `protobuf:"varint,2,opt,name=bytes_received,json=bytesReceived,proto3" json:"bytes_received,omitempty"`
+	// Traffic Categorization (Egress Analyzer)
+	EgressPublicBytes   uint64 `protobuf:"varint,3,opt,name=egress_public_bytes,json=egressPublicBytes,proto3" json:"egress_public_bytes,omitempty"`
+	EgressCrossAzBytes  uint64 `protobuf:"varint,4,opt,name=egress_cross_az_bytes,json=egressCrossAzBytes,proto3" json:"egress_cross_az_bytes,omitempty"`
+	EgressInternalBytes uint64 `protobuf:"varint,5,opt,name=egress_internal_bytes,json=egressInternalBytes,proto3" json:"egress_internal_bytes,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *NetworkMetrics) Reset() {
+	*x = NetworkMetrics{}
 	mi := &file_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NodeCostRecord) String() string {
+func (x *NetworkMetrics) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NodeCostRecord) ProtoMessage() {}
+func (*NetworkMetrics) ProtoMessage() {}
 
-func (x *NodeCostRecord) ProtoReflect() protoreflect.Message {
+func (x *NetworkMetrics) ProtoReflect() protoreflect.Message {
 	mi := &file_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -497,131 +428,74 @@ func (x *NodeCostRecord) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NodeCostRecord.ProtoReflect.Descriptor instead.
-func (*NodeCostRecord) Descriptor() ([]byte, []int) {
+// Deprecated: Use NetworkMetrics.ProtoReflect.Descriptor instead.
+func (*NetworkMetrics) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *NodeCostRecord) GetClusterId() string {
+func (x *NetworkMetrics) GetBytesSent() uint64 {
 	if x != nil {
-		return x.ClusterId
-	}
-	return ""
-}
-
-func (x *NodeCostRecord) GetNodeName() string {
-	if x != nil {
-		return x.NodeName
-	}
-	return ""
-}
-
-func (x *NodeCostRecord) GetCpuAllocatableMilli() int64 {
-	if x != nil {
-		return x.CpuAllocatableMilli
+		return x.BytesSent
 	}
 	return 0
 }
 
-func (x *NodeCostRecord) GetMemoryAllocatableBytes() int64 {
+func (x *NetworkMetrics) GetBytesReceived() uint64 {
 	if x != nil {
-		return x.MemoryAllocatableBytes
+		return x.BytesReceived
 	}
 	return 0
 }
 
-func (x *NodeCostRecord) GetLabels() map[string]string {
+func (x *NetworkMetrics) GetEgressPublicBytes() uint64 {
 	if x != nil {
-		return x.Labels
-	}
-	return nil
-}
-
-func (x *NodeCostRecord) GetTaints() []string {
-	if x != nil {
-		return x.Taints
-	}
-	return nil
-}
-
-func (x *NodeCostRecord) GetInstanceType() string {
-	if x != nil {
-		return x.InstanceType
-	}
-	return ""
-}
-
-func (x *NodeCostRecord) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *NodeCostRecord) GetIsUnderPressure() bool {
-	if x != nil {
-		return x.IsUnderPressure
-	}
-	return false
-}
-
-func (x *NodeCostRecord) GetHourlyCost() float64 {
-	if x != nil {
-		return x.HourlyCost
+		return x.EgressPublicBytes
 	}
 	return 0
 }
 
-func (x *NodeCostRecord) GetCpuUsagePercent() float64 {
+func (x *NetworkMetrics) GetEgressCrossAzBytes() uint64 {
 	if x != nil {
-		return x.CpuUsagePercent
+		return x.EgressCrossAzBytes
 	}
 	return 0
 }
 
-func (x *NodeCostRecord) GetMemoryUsagePercent() float64 {
+func (x *NetworkMetrics) GetEgressInternalBytes() uint64 {
 	if x != nil {
-		return x.MemoryUsagePercent
+		return x.EgressInternalBytes
 	}
 	return 0
 }
 
-func (x *NodeCostRecord) GetPodCount() int64 {
-	if x != nil {
-		return x.PodCount
-	}
-	return 0
+type StorageMetrics struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Throughput
+	ReadBytes  uint64 `protobuf:"varint,1,opt,name=read_bytes,json=readBytes,proto3" json:"read_bytes,omitempty"`
+	WriteBytes uint64 `protobuf:"varint,2,opt,name=write_bytes,json=writeBytes,proto3" json:"write_bytes,omitempty"`
+	// IOPS
+	ReadOps  uint64 `protobuf:"varint,3,opt,name=read_ops,json=readOps,proto3" json:"read_ops,omitempty"`
+	WriteOps uint64 `protobuf:"varint,4,opt,name=write_ops,json=writeOps,proto3" json:"write_ops,omitempty"`
+	// Latency
+	TotalLatencyNs uint64 `protobuf:"varint,5,opt,name=total_latency_ns,json=totalLatencyNs,proto3" json:"total_latency_ns,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
-type ResourceSnapshot struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	ClusterId               string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	CpuUsageMilliTotal      int64                  `protobuf:"varint,2,opt,name=cpu_usage_milli_total,json=cpuUsageMilliTotal,proto3" json:"cpu_usage_milli_total,omitempty"`
-	CpuRequestMilliTotal    int64                  `protobuf:"varint,3,opt,name=cpu_request_milli_total,json=cpuRequestMilliTotal,proto3" json:"cpu_request_milli_total,omitempty"`
-	MemoryUsageBytesTotal   int64                  `protobuf:"varint,4,opt,name=memory_usage_bytes_total,json=memoryUsageBytesTotal,proto3" json:"memory_usage_bytes_total,omitempty"`
-	MemoryRequestBytesTotal int64                  `protobuf:"varint,5,opt,name=memory_request_bytes_total,json=memoryRequestBytesTotal,proto3" json:"memory_request_bytes_total,omitempty"`
-	TotalNodeHourlyCost     float64                `protobuf:"fixed64,6,opt,name=total_node_hourly_cost,json=totalNodeHourlyCost,proto3" json:"total_node_hourly_cost,omitempty"`
-	NetworkTxBytesTotal     uint64                 `protobuf:"varint,7,opt,name=network_tx_bytes_total,json=networkTxBytesTotal,proto3" json:"network_tx_bytes_total,omitempty"`
-	NetworkRxBytesTotal     uint64                 `protobuf:"varint,8,opt,name=network_rx_bytes_total,json=networkRxBytesTotal,proto3" json:"network_rx_bytes_total,omitempty"`
-	NetworkEgressCostTotal  float64                `protobuf:"fixed64,9,opt,name=network_egress_cost_total,json=networkEgressCostTotal,proto3" json:"network_egress_cost_total,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
-}
-
-func (x *ResourceSnapshot) Reset() {
-	*x = ResourceSnapshot{}
+func (x *StorageMetrics) Reset() {
+	*x = StorageMetrics{}
 	mi := &file_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResourceSnapshot) String() string {
+func (x *StorageMetrics) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ResourceSnapshot) ProtoMessage() {}
+func (*StorageMetrics) ProtoMessage() {}
 
-func (x *ResourceSnapshot) ProtoReflect() protoreflect.Message {
+func (x *StorageMetrics) ProtoReflect() protoreflect.Message {
 	mi := &file_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -633,138 +507,42 @@ func (x *ResourceSnapshot) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResourceSnapshot.ProtoReflect.Descriptor instead.
-func (*ResourceSnapshot) Descriptor() ([]byte, []int) {
+// Deprecated: Use StorageMetrics.ProtoReflect.Descriptor instead.
+func (*StorageMetrics) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *ResourceSnapshot) GetClusterId() string {
+func (x *StorageMetrics) GetReadBytes() uint64 {
 	if x != nil {
-		return x.ClusterId
-	}
-	return ""
-}
-
-func (x *ResourceSnapshot) GetCpuUsageMilliTotal() int64 {
-	if x != nil {
-		return x.CpuUsageMilliTotal
+		return x.ReadBytes
 	}
 	return 0
 }
 
-func (x *ResourceSnapshot) GetCpuRequestMilliTotal() int64 {
+func (x *StorageMetrics) GetWriteBytes() uint64 {
 	if x != nil {
-		return x.CpuRequestMilliTotal
+		return x.WriteBytes
 	}
 	return 0
 }
 
-func (x *ResourceSnapshot) GetMemoryUsageBytesTotal() int64 {
+func (x *StorageMetrics) GetReadOps() uint64 {
 	if x != nil {
-		return x.MemoryUsageBytesTotal
+		return x.ReadOps
 	}
 	return 0
 }
 
-func (x *ResourceSnapshot) GetMemoryRequestBytesTotal() int64 {
+func (x *StorageMetrics) GetWriteOps() uint64 {
 	if x != nil {
-		return x.MemoryRequestBytesTotal
+		return x.WriteOps
 	}
 	return 0
 }
 
-func (x *ResourceSnapshot) GetTotalNodeHourlyCost() float64 {
+func (x *StorageMetrics) GetTotalLatencyNs() uint64 {
 	if x != nil {
-		return x.TotalNodeHourlyCost
-	}
-	return 0
-}
-
-func (x *ResourceSnapshot) GetNetworkTxBytesTotal() uint64 {
-	if x != nil {
-		return x.NetworkTxBytesTotal
-	}
-	return 0
-}
-
-func (x *ResourceSnapshot) GetNetworkRxBytesTotal() uint64 {
-	if x != nil {
-		return x.NetworkRxBytesTotal
-	}
-	return 0
-}
-
-func (x *ResourceSnapshot) GetNetworkEgressCostTotal() float64 {
-	if x != nil {
-		return x.NetworkEgressCostTotal
-	}
-	return 0
-}
-
-type NetworkClassTotals struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Class            string                 `protobuf:"bytes,1,opt,name=class,proto3" json:"class,omitempty"`
-	TxBytes          uint64                 `protobuf:"varint,2,opt,name=tx_bytes,json=txBytes,proto3" json:"tx_bytes,omitempty"`
-	RxBytes          uint64                 `protobuf:"varint,3,opt,name=rx_bytes,json=rxBytes,proto3" json:"rx_bytes,omitempty"`
-	EgressCostHourly float64                `protobuf:"fixed64,4,opt,name=egress_cost_hourly,json=egressCostHourly,proto3" json:"egress_cost_hourly,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *NetworkClassTotals) Reset() {
-	*x = NetworkClassTotals{}
-	mi := &file_agent_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NetworkClassTotals) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NetworkClassTotals) ProtoMessage() {}
-
-func (x *NetworkClassTotals) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NetworkClassTotals.ProtoReflect.Descriptor instead.
-func (*NetworkClassTotals) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *NetworkClassTotals) GetClass() string {
-	if x != nil {
-		return x.Class
-	}
-	return ""
-}
-
-func (x *NetworkClassTotals) GetTxBytes() uint64 {
-	if x != nil {
-		return x.TxBytes
-	}
-	return 0
-}
-
-func (x *NetworkClassTotals) GetRxBytes() uint64 {
-	if x != nil {
-		return x.RxBytes
-	}
-	return 0
-}
-
-func (x *NetworkClassTotals) GetEgressCostHourly() float64 {
-	if x != nil {
-		return x.EgressCostHourly
+		return x.TotalLatencyNs
 	}
 	return 0
 }
@@ -773,89 +551,53 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\bagent.v1\"\x80\x02\n" +
-	"\rReportRequest\x12\x1d\n" +
+	"\vagent.proto\x12\bagent.v1\"\xe9\x01\n" +
+	"\rReportRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
-	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12!\n" +
-	"\fcluster_name\x18\x02 \x01(\tR\vclusterName\x12\x1b\n" +
-	"\tnode_name\x18\x03 \x01(\tR\bnodeName\x12\x19\n" +
-	"\bagent_id\x18\x04 \x01(\tR\aagentId\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\tR\aversion\x12+\n" +
-	"\x11timestamp_seconds\x18\x06 \x01(\x03R\x10timestampSeconds\x12.\n" +
-	"\bsnapshot\x18\a \x01(\v2\x12.agent.v1.SnapshotR\bsnapshot\"G\n" +
-	"\x12ReportBatchRequest\x121\n" +
-	"\areports\x18\x01 \x03(\v2\x17.agent.v1.ReportRequestR\areports\"Q\n" +
+	"cluster_id\x18\x02 \x01(\tR\tclusterId\x12\x1b\n" +
+	"\tnode_name\x18\x03 \x01(\tR\bnodeName\x12+\n" +
+	"\x11availability_zone\x18\x04 \x01(\tR\x10availabilityZone\x12+\n" +
+	"\x11timestamp_seconds\x18\x05 \x01(\x03R\x10timestampSeconds\x12'\n" +
+	"\x04pods\x18\x06 \x03(\v2\x13.agent.v1.PodMetricR\x04pods\"Q\n" +
 	"\x0eReportResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xc8\x01\n" +
-	"\bSnapshot\x12+\n" +
-	"\x11timestamp_seconds\x18\x01 \x01(\x03R\x10timestampSeconds\x12,\n" +
-	"\x04node\x18\x02 \x01(\v2\x18.agent.v1.NodeCostRecordR\x04node\x12'\n" +
-	"\x04pods\x18\x03 \x03(\v2\x13.agent.v1.PodRecordR\x04pods\x128\n" +
-	"\tresources\x18\x04 \x01(\v2\x1a.agent.v1.ResourceSnapshotR\tresources\"\x8e\x06\n" +
-	"\tPodRecord\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
-	"\x03pod\x18\x02 \x01(\tR\x03pod\x12\x12\n" +
-	"\x04node\x18\x03 \x01(\tR\x04node\x127\n" +
-	"\x06labels\x18\x04 \x03(\v2\x1f.agent.v1.PodRecord.LabelsEntryR\x06labels\x12 \n" +
-	"\venvironment\x18\x05 \x01(\tR\venvironment\x12\x1d\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xdc\x02\n" +
+	"\tPodMetric\x12\x17\n" +
+	"\apod_uid\x18\x01 \x01(\tR\x06podUid\x12!\n" +
+	"\fcontainer_id\x18\x02 \x01(\tR\vcontainerId\x12\x19\n" +
+	"\bpid_tgid\x18\x03 \x01(\rR\apidTgid\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12\x19\n" +
+	"\bpod_name\x18\x05 \x01(\tR\apodName\x12&\n" +
+	"\x03cpu\x18\x06 \x01(\v2\x14.agent.v1.CpuMetricsR\x03cpu\x12/\n" +
+	"\x06memory\x18\a \x01(\v2\x17.agent.v1.MemoryMetricsR\x06memory\x122\n" +
+	"\anetwork\x18\b \x01(\v2\x18.agent.v1.NetworkMetricsR\anetwork\x122\n" +
+	"\astorage\x18\t \x01(\v2\x18.agent.v1.StorageMetricsR\astorage\"}\n" +
 	"\n" +
-	"owner_kind\x18\x06 \x01(\tR\townerKind\x12\x1d\n" +
+	"CpuMetrics\x12\"\n" +
+	"\rusage_user_ns\x18\x01 \x01(\x04R\vusageUserNs\x12&\n" +
+	"\x0fusage_kernel_ns\x18\x02 \x01(\x04R\rusageKernelNs\x12#\n" +
+	"\rthrottling_ns\x18\x03 \x01(\x04R\fthrottlingNs\"X\n" +
+	"\rMemoryMetrics\x12\x1b\n" +
+	"\trss_bytes\x18\x01 \x01(\x04R\brssBytes\x12*\n" +
+	"\x11page_faults_major\x18\x02 \x01(\x04R\x0fpageFaultsMajor\"\xed\x01\n" +
+	"\x0eNetworkMetrics\x12\x1d\n" +
 	"\n" +
-	"owner_name\x18\a \x01(\tR\townerName\x12*\n" +
-	"\x11cpu_request_milli\x18\b \x01(\x03R\x0fcpuRequestMilli\x12&\n" +
-	"\x0fcpu_usage_milli\x18\t \x01(\x03R\rcpuUsageMilli\x120\n" +
-	"\x14memory_request_bytes\x18\n" +
-	" \x01(\x03R\x12memoryRequestBytes\x12,\n" +
-	"\x12memory_usage_bytes\x18\v \x01(\x03R\x10memoryUsageBytes\x120\n" +
-	"\x14resource_hourly_cost\x18\f \x01(\x01R\x12resourceHourlyCost\x12(\n" +
-	"\x10network_tx_bytes\x18\r \x01(\x04R\x0enetworkTxBytes\x12(\n" +
-	"\x10network_rx_bytes\x18\x0e \x01(\x04R\x0enetworkRxBytes\x12;\n" +
-	"\x1anetwork_egress_cost_hourly\x18\x0f \x01(\x01R\x17networkEgressCostHourly\x12F\n" +
-	"\x10network_by_class\x18\x10 \x03(\v2\x1c.agent.v1.NetworkClassTotalsR\x0enetworkByClass\x12*\n" +
-	"\x11total_hourly_cost\x18\x11 \x01(\x01R\x0ftotalHourlyCost\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd0\x04\n" +
-	"\x0eNodeCostRecord\x12\x1d\n" +
+	"bytes_sent\x18\x01 \x01(\x04R\tbytesSent\x12%\n" +
+	"\x0ebytes_received\x18\x02 \x01(\x04R\rbytesReceived\x12.\n" +
+	"\x13egress_public_bytes\x18\x03 \x01(\x04R\x11egressPublicBytes\x121\n" +
+	"\x15egress_cross_az_bytes\x18\x04 \x01(\x04R\x12egressCrossAzBytes\x122\n" +
+	"\x15egress_internal_bytes\x18\x05 \x01(\x04R\x13egressInternalBytes\"\xb2\x01\n" +
+	"\x0eStorageMetrics\x12\x1d\n" +
 	"\n" +
-	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12\x1b\n" +
-	"\tnode_name\x18\x02 \x01(\tR\bnodeName\x122\n" +
-	"\x15cpu_allocatable_milli\x18\x03 \x01(\x03R\x13cpuAllocatableMilli\x128\n" +
-	"\x18memory_allocatable_bytes\x18\x04 \x01(\x03R\x16memoryAllocatableBytes\x12<\n" +
-	"\x06labels\x18\x05 \x03(\v2$.agent.v1.NodeCostRecord.LabelsEntryR\x06labels\x12\x16\n" +
-	"\x06taints\x18\x06 \x03(\tR\x06taints\x12#\n" +
-	"\rinstance_type\x18\a \x01(\tR\finstanceType\x12\x16\n" +
-	"\x06status\x18\b \x01(\tR\x06status\x12*\n" +
-	"\x11is_under_pressure\x18\t \x01(\bR\x0fisUnderPressure\x12\x1f\n" +
-	"\vhourly_cost\x18\n" +
-	" \x01(\x01R\n" +
-	"hourlyCost\x12*\n" +
-	"\x11cpu_usage_percent\x18\v \x01(\x01R\x0fcpuUsagePercent\x120\n" +
-	"\x14memory_usage_percent\x18\f \x01(\x01R\x12memoryUsagePercent\x12\x1b\n" +
-	"\tpod_count\x18\r \x01(\x03R\bpodCount\x1a9\n" +
-	"\vLabelsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xeb\x03\n" +
-	"\x10ResourceSnapshot\x12\x1d\n" +
-	"\n" +
-	"cluster_id\x18\x01 \x01(\tR\tclusterId\x121\n" +
-	"\x15cpu_usage_milli_total\x18\x02 \x01(\x03R\x12cpuUsageMilliTotal\x125\n" +
-	"\x17cpu_request_milli_total\x18\x03 \x01(\x03R\x14cpuRequestMilliTotal\x127\n" +
-	"\x18memory_usage_bytes_total\x18\x04 \x01(\x03R\x15memoryUsageBytesTotal\x12;\n" +
-	"\x1amemory_request_bytes_total\x18\x05 \x01(\x03R\x17memoryRequestBytesTotal\x123\n" +
-	"\x16total_node_hourly_cost\x18\x06 \x01(\x01R\x13totalNodeHourlyCost\x123\n" +
-	"\x16network_tx_bytes_total\x18\a \x01(\x04R\x13networkTxBytesTotal\x123\n" +
-	"\x16network_rx_bytes_total\x18\b \x01(\x04R\x13networkRxBytesTotal\x129\n" +
-	"\x19network_egress_cost_total\x18\t \x01(\x01R\x16networkEgressCostTotal\"\x8e\x01\n" +
-	"\x12NetworkClassTotals\x12\x14\n" +
-	"\x05class\x18\x01 \x01(\tR\x05class\x12\x19\n" +
-	"\btx_bytes\x18\x02 \x01(\x04R\atxBytes\x12\x19\n" +
-	"\brx_bytes\x18\x03 \x01(\x04R\arxBytes\x12,\n" +
-	"\x12egress_cost_hourly\x18\x04 \x01(\x01R\x10egressCostHourly2\x8f\x01\n" +
+	"read_bytes\x18\x01 \x01(\x04R\treadBytes\x12\x1f\n" +
+	"\vwrite_bytes\x18\x02 \x01(\x04R\n" +
+	"writeBytes\x12\x19\n" +
+	"\bread_ops\x18\x03 \x01(\x04R\areadOps\x12\x1b\n" +
+	"\twrite_ops\x18\x04 \x01(\x04R\bwriteOps\x12(\n" +
+	"\x10total_latency_ns\x18\x05 \x01(\x04R\x0etotalLatencyNs2H\n" +
 	"\tCollector\x12;\n" +
-	"\x06Report\x12\x17.agent.v1.ReportRequest\x1a\x18.agent.v1.ReportResponse\x12E\n" +
-	"\vReportBatch\x12\x1c.agent.v1.ReportBatchRequest\x1a\x18.agent.v1.ReportResponseB7Z5clustercost-agent-k8s/internal/proto/agent/v1;agentv1b\x06proto3"
+	"\x06Report\x12\x17.agent.v1.ReportRequest\x1a\x18.agent.v1.ReportResponseB7Z5clustercost-agent-k8s/internal/proto/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_agent_proto_rawDescOnce sync.Once
@@ -869,37 +611,29 @@ func file_agent_proto_rawDescGZIP() []byte {
 	return file_agent_proto_rawDescData
 }
 
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_agent_proto_goTypes = []any{
-	(*ReportRequest)(nil),      // 0: agent.v1.ReportRequest
-	(*ReportBatchRequest)(nil), // 1: agent.v1.ReportBatchRequest
-	(*ReportResponse)(nil),     // 2: agent.v1.ReportResponse
-	(*Snapshot)(nil),           // 3: agent.v1.Snapshot
-	(*PodRecord)(nil),          // 4: agent.v1.PodRecord
-	(*NodeCostRecord)(nil),     // 5: agent.v1.NodeCostRecord
-	(*ResourceSnapshot)(nil),   // 6: agent.v1.ResourceSnapshot
-	(*NetworkClassTotals)(nil), // 7: agent.v1.NetworkClassTotals
-	nil,                        // 8: agent.v1.PodRecord.LabelsEntry
-	nil,                        // 9: agent.v1.NodeCostRecord.LabelsEntry
+	(*ReportRequest)(nil),  // 0: agent.v1.ReportRequest
+	(*ReportResponse)(nil), // 1: agent.v1.ReportResponse
+	(*PodMetric)(nil),      // 2: agent.v1.PodMetric
+	(*CpuMetrics)(nil),     // 3: agent.v1.CpuMetrics
+	(*MemoryMetrics)(nil),  // 4: agent.v1.MemoryMetrics
+	(*NetworkMetrics)(nil), // 5: agent.v1.NetworkMetrics
+	(*StorageMetrics)(nil), // 6: agent.v1.StorageMetrics
 }
 var file_agent_proto_depIdxs = []int32{
-	3,  // 0: agent.v1.ReportRequest.snapshot:type_name -> agent.v1.Snapshot
-	0,  // 1: agent.v1.ReportBatchRequest.reports:type_name -> agent.v1.ReportRequest
-	5,  // 2: agent.v1.Snapshot.node:type_name -> agent.v1.NodeCostRecord
-	4,  // 3: agent.v1.Snapshot.pods:type_name -> agent.v1.PodRecord
-	6,  // 4: agent.v1.Snapshot.resources:type_name -> agent.v1.ResourceSnapshot
-	8,  // 5: agent.v1.PodRecord.labels:type_name -> agent.v1.PodRecord.LabelsEntry
-	7,  // 6: agent.v1.PodRecord.network_by_class:type_name -> agent.v1.NetworkClassTotals
-	9,  // 7: agent.v1.NodeCostRecord.labels:type_name -> agent.v1.NodeCostRecord.LabelsEntry
-	0,  // 8: agent.v1.Collector.Report:input_type -> agent.v1.ReportRequest
-	1,  // 9: agent.v1.Collector.ReportBatch:input_type -> agent.v1.ReportBatchRequest
-	2,  // 10: agent.v1.Collector.Report:output_type -> agent.v1.ReportResponse
-	2,  // 11: agent.v1.Collector.ReportBatch:output_type -> agent.v1.ReportResponse
-	10, // [10:12] is the sub-list for method output_type
-	8,  // [8:10] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	2, // 0: agent.v1.ReportRequest.pods:type_name -> agent.v1.PodMetric
+	3, // 1: agent.v1.PodMetric.cpu:type_name -> agent.v1.CpuMetrics
+	4, // 2: agent.v1.PodMetric.memory:type_name -> agent.v1.MemoryMetrics
+	5, // 3: agent.v1.PodMetric.network:type_name -> agent.v1.NetworkMetrics
+	6, // 4: agent.v1.PodMetric.storage:type_name -> agent.v1.StorageMetrics
+	0, // 5: agent.v1.Collector.Report:input_type -> agent.v1.ReportRequest
+	1, // 6: agent.v1.Collector.Report:output_type -> agent.v1.ReportResponse
+	6, // [6:7] is the sub-list for method output_type
+	5, // [5:6] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -913,7 +647,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

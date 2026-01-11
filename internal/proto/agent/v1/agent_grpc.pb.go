@@ -19,18 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Collector_Report_FullMethodName      = "/agent.v1.Collector/Report"
-	Collector_ReportBatch_FullMethodName = "/agent.v1.Collector/ReportBatch"
+	Collector_Report_FullMethodName = "/agent.v1.Collector/Report"
 )
 
 // CollectorClient is the client API for Collector service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CollectorClient interface {
-	// Report sends a single agent report to the collector.
+	// Report sends a batch of metrics from the agent to the aggregator.
 	Report(ctx context.Context, in *ReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
-	// ReportBatch sends multiple agent reports in a single request.
-	ReportBatch(ctx context.Context, in *ReportBatchRequest, opts ...grpc.CallOption) (*ReportResponse, error)
 }
 
 type collectorClient struct {
@@ -51,24 +48,12 @@ func (c *collectorClient) Report(ctx context.Context, in *ReportRequest, opts ..
 	return out, nil
 }
 
-func (c *collectorClient) ReportBatch(ctx context.Context, in *ReportBatchRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReportResponse)
-	err := c.cc.Invoke(ctx, Collector_ReportBatch_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // CollectorServer is the server API for Collector service.
 // All implementations must embed UnimplementedCollectorServer
 // for forward compatibility.
 type CollectorServer interface {
-	// Report sends a single agent report to the collector.
+	// Report sends a batch of metrics from the agent to the aggregator.
 	Report(context.Context, *ReportRequest) (*ReportResponse, error)
-	// ReportBatch sends multiple agent reports in a single request.
-	ReportBatch(context.Context, *ReportBatchRequest) (*ReportResponse, error)
 	mustEmbedUnimplementedCollectorServer()
 }
 
@@ -81,9 +66,6 @@ type UnimplementedCollectorServer struct{}
 
 func (UnimplementedCollectorServer) Report(context.Context, *ReportRequest) (*ReportResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Report not implemented")
-}
-func (UnimplementedCollectorServer) ReportBatch(context.Context, *ReportBatchRequest) (*ReportResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ReportBatch not implemented")
 }
 func (UnimplementedCollectorServer) mustEmbedUnimplementedCollectorServer() {}
 func (UnimplementedCollectorServer) testEmbeddedByValue()                   {}
@@ -124,24 +106,6 @@ func _Collector_Report_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Collector_ReportBatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReportBatchRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(CollectorServer).ReportBatch(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Collector_ReportBatch_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollectorServer).ReportBatch(ctx, req.(*ReportBatchRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // Collector_ServiceDesc is the grpc.ServiceDesc for Collector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -152,10 +116,6 @@ var Collector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Report",
 			Handler:    _Collector_Report_Handler,
-		},
-		{
-			MethodName: "ReportBatch",
-			Handler:    _Collector_ReportBatch_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

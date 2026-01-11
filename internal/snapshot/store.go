@@ -1,40 +1,39 @@
 package snapshot
 
-import "sync"
+import (
+	"sync"
+)
 
-// Store keeps the last generated snapshot in memory.
+// Store holds the latest snapshot safely.
 type Store struct {
 	mu       sync.RWMutex
 	snapshot Snapshot
-	ready    bool
 }
 
-// NewStore constructs an empty store.
+// NewStore returns a new empty store.
 func NewStore() *Store {
 	return &Store{}
 }
 
-// Update swaps the snapshot atomically.
+// Update replaces the current snapshot.
 func (s *Store) Update(snap Snapshot) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.snapshot = snap
-	s.ready = true
-	s.mu.Unlock()
 }
 
-// Latest returns the most recent snapshot, if any.
+// Latest returns the most recent snapshot and true if available.
 func (s *Store) Latest() (Snapshot, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if !s.ready {
+	if s.snapshot.Timestamp.IsZero() {
 		return Snapshot{}, false
 	}
 	return s.snapshot, true
 }
 
-// LatestSnapshot returns the snapshot without the readiness flag.
+// LatestSnapshot is a convenience method returning the snapshot value directly (empty if missing).
 func (s *Store) LatestSnapshot() Snapshot {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.snapshot
+	snap, _ := s.Latest()
+	return snap
 }
