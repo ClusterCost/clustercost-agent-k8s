@@ -23,7 +23,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/uuid"
+
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -189,8 +190,14 @@ func main() {
 	builder := snapshot.NewBuilder(clusterID)
 	store := snapshot.NewStore()
 
-	agentID := string(uuid.NewUUID())
-	logger.Info("agent id generated", slog.String("agentId", agentID))
+	// Generate Stable Agent ID based on Node Name (if available) or Cluster ID
+	agentID := uuid.NewString()
+	if nodeName != "" {
+		// Deterministic UUID v5 based on Node Name ensures stability across restarts
+		// Using NameSpaceDNS as a stable namespace for hostnames
+		agentID = uuid.NewSHA1(uuid.NameSpaceDNS, []byte(nodeName)).String()
+	}
+	logger.Info("agent id generated", slog.String("agentId", agentID), slog.String("scope", "stable-node-identity"))
 
 	go runSnapshotLoop(ctx, builder, cache, metricsCollector, networkCollector, queue, clusterID, clusterName, nodeName, agentID, agentVersion, store, cfg.ScrapeInterval(), logger)
 
@@ -245,14 +252,23 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 		return err
 	}
 
-	var availabilityZone string
+	var availabilityZone, region, instanceType string
 	if nodeName != "" {
 		nodes = filterNodes(nodes, nodeName)
 		pods = filterPods(pods, nodeName)
 		if len(nodes) > 0 {
-			availabilityZone = nodes[0].Labels["topology.kubernetes.io/zone"]
+			labels := nodes[0].Labels
+			availabilityZone = labels["topology.kubernetes.io/zone"]
 			if availabilityZone == "" {
-				availabilityZone = nodes[0].Labels["failure-domain.beta.kubernetes.io/zone"]
+				availabilityZone = labels["failure-domain.beta.kubernetes.io/zone"]
+			}
+			region = labels["topology.kubernetes.io/region"]
+			if region == "" {
+				region = labels["failure-domain.beta.kubernetes.io/region"]
+			}
+			instanceType = labels["node.kubernetes.io/instance-type"]
+			if instanceType == "" {
+				instanceType = labels["beta.kubernetes.io/instance-type"]
 			}
 		}
 	}
@@ -282,6 +298,8 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 			ClusterName:      clusterName,
 			NodeName:         nodeName,
 			AvailabilityZone: availabilityZone,
+			Region:           region,
+			InstanceType:     instanceType,
 			AgentID:          agentID,
 			Version:          version,
 			Timestamp:        time.Now().UTC(),

@@ -15,8 +15,10 @@ message ReportRequest {
   string node_name = 3;
   string availability_zone = 4;
   int64 timestamp_seconds = 5;
+  string region = 6;
+  string instance_type = 7;
 
-  repeated PodMetric pods = 6;
+  repeated PodMetric pods = 8;
 }
 
 message ReportResponse {
@@ -55,6 +57,10 @@ message CpuMetrics {
   uint64 usage_kernel_ns = 2;
   // Total run_delay (throttling) in nanoseconds
   uint64 throttling_ns = 3;
+  // K8s Requests (mCPU)
+  uint64 request_millicores = 4;
+  // K8s Limits (mCPU)
+  uint64 limit_millicores = 5;
 }
 
 message MemoryMetrics {
@@ -62,6 +68,10 @@ message MemoryMetrics {
   uint64 rss_bytes = 1;
   // Major page faults
   uint64 page_faults_major = 2;
+  // K8s Requests (bytes)
+  uint64 request_bytes = 3;
+  // K8s Limits (bytes)
+  uint64 limit_bytes = 4;
 }
 
 message NetworkMetrics {

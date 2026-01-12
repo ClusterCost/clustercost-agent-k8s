@@ -72,6 +72,8 @@ func (s *GRPCSender) toProto(r AgentReport) *agentv1.ReportRequest {
 		ClusterId:        r.ClusterID,
 		NodeName:         r.NodeName,
 		AvailabilityZone: r.AvailabilityZone,
+		Region:           r.Region,
+		InstanceType:     r.InstanceType,
 		AgentId:          r.AgentID,
 		TimestampSeconds: r.Timestamp.Unix(),
 	}
@@ -91,13 +93,17 @@ func (s *GRPCSender) podMetricToProto(p snapshot.PodMetric) *agentv1.PodMetric {
 		Namespace:   p.Namespace,
 		PodName:     p.PodName,
 		Cpu: &agentv1.CpuMetrics{
-			UsageUserNs:   p.Cpu.UsageUser,
-			UsageKernelNs: p.Cpu.UsageKernel,
-			ThrottlingNs:  p.Cpu.Throttling,
+			UsageUserNs:       p.Cpu.UsageUser,
+			UsageKernelNs:     p.Cpu.UsageKernel,
+			ThrottlingNs:      p.Cpu.Throttling,
+			RequestMillicores: p.Cpu.RequestMillicores,
+			LimitMillicores:   p.Cpu.LimitMillicores,
 		},
 		Memory: &agentv1.MemoryMetrics{
 			RssBytes:        p.Memory.RSS,
 			PageFaultsMajor: p.Memory.PageFaults,
+			RequestBytes:    p.Memory.RequestBytes,
+			LimitBytes:      p.Memory.LimitBytes,
 		},
 		Network: &agentv1.NetworkMetrics{
 			BytesSent:           p.Network.BytesSent,

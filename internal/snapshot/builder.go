@@ -102,13 +102,17 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 			PodName:     pod.Name,
 
 			Cpu: CpuMetrics{
-				UsageUser:   podUsage.CPUUsageUserNs,
-				UsageKernel: podUsage.CPUUsageKernelNs,
-				Throttling:  podUsage.CPUThrottlingNs,
+				UsageUser:         podUsage.CPUUsageUserNs,
+				UsageKernel:       podUsage.CPUUsageKernelNs,
+				Throttling:        podUsage.CPUThrottlingNs,
+				RequestMillicores: sumCPU(pod.Spec.Containers, true),
+				LimitMillicores:   sumCPU(pod.Spec.Containers, false),
 			},
 			Memory: MemoryMetrics{
-				RSS:        podUsage.MemoryRSS,
-				PageFaults: podUsage.MemoryPageFaults,
+				RSS:          podUsage.MemoryRSS,
+				PageFaults:   podUsage.MemoryPageFaults,
+				RequestBytes: sumMemory(pod.Spec.Containers, true),
+				LimitBytes:   sumMemory(pod.Spec.Containers, false),
 			},
 			Network: NetworkMetrics{
 				BytesSent:      netUsage.TxBytes,
@@ -188,4 +192,38 @@ func skipPod(pod *corev1.Pod) bool {
 		return true
 	}
 	return false
+}
+
+func sumCPU(containers []corev1.Container, requests bool) uint64 {
+	var total int64
+	for _, c := range containers {
+		if requests {
+			total += c.Resources.Requests.Cpu().MilliValue()
+		} else {
+			total += c.Resources.Limits.Cpu().MilliValue()
+		}
+	}
+	if total < 0 {
+		return 0
+	}
+	return uint64(total)
+}
+
+func sumMemory(containers []corev1.Container, requests bool) uint64 {
+	var total int64
+	for _, c := range containers {
+		if requests {
+			if q, ok := c.Resources.Requests[corev1.ResourceMemory]; ok {
+				total += q.Value()
+			}
+		} else {
+			if q, ok := c.Resources.Limits[corev1.ResourceMemory]; ok {
+				total += q.Value()
+			}
+		}
+	}
+	if total < 0 {
+		return 0
+	}
+	return uint64(total)
 }

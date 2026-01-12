@@ -28,7 +28,9 @@ type ReportRequest struct {
 	NodeName         string                 `protobuf:"bytes,3,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
 	AvailabilityZone string                 `protobuf:"bytes,4,opt,name=availability_zone,json=availabilityZone,proto3" json:"availability_zone,omitempty"`
 	TimestampSeconds int64                  `protobuf:"varint,5,opt,name=timestamp_seconds,json=timestampSeconds,proto3" json:"timestamp_seconds,omitempty"`
-	Pods             []*PodMetric           `protobuf:"bytes,6,rep,name=pods,proto3" json:"pods,omitempty"`
+	Region           string                 `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
+	InstanceType     string                 `protobuf:"bytes,7,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
+	Pods             []*PodMetric           `protobuf:"bytes,8,rep,name=pods,proto3" json:"pods,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -96,6 +98,20 @@ func (x *ReportRequest) GetTimestampSeconds() int64 {
 		return x.TimestampSeconds
 	}
 	return 0
+}
+
+func (x *ReportRequest) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *ReportRequest) GetInstanceType() string {
+	if x != nil {
+		return x.InstanceType
+	}
+	return ""
 }
 
 func (x *ReportRequest) GetPods() []*PodMetric {
@@ -280,9 +296,13 @@ type CpuMetrics struct {
 	// Total nanoseconds in kernel space
 	UsageKernelNs uint64 `protobuf:"varint,2,opt,name=usage_kernel_ns,json=usageKernelNs,proto3" json:"usage_kernel_ns,omitempty"`
 	// Total run_delay (throttling) in nanoseconds
-	ThrottlingNs  uint64 `protobuf:"varint,3,opt,name=throttling_ns,json=throttlingNs,proto3" json:"throttling_ns,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ThrottlingNs uint64 `protobuf:"varint,3,opt,name=throttling_ns,json=throttlingNs,proto3" json:"throttling_ns,omitempty"`
+	// K8s Requests (mCPU)
+	RequestMillicores uint64 `protobuf:"varint,4,opt,name=request_millicores,json=requestMillicores,proto3" json:"request_millicores,omitempty"`
+	// K8s Limits (mCPU)
+	LimitMillicores uint64 `protobuf:"varint,5,opt,name=limit_millicores,json=limitMillicores,proto3" json:"limit_millicores,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *CpuMetrics) Reset() {
@@ -336,14 +356,32 @@ func (x *CpuMetrics) GetThrottlingNs() uint64 {
 	return 0
 }
 
+func (x *CpuMetrics) GetRequestMillicores() uint64 {
+	if x != nil {
+		return x.RequestMillicores
+	}
+	return 0
+}
+
+func (x *CpuMetrics) GetLimitMillicores() uint64 {
+	if x != nil {
+		return x.LimitMillicores
+	}
+	return 0
+}
+
 type MemoryMetrics struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Resident Set Size (bytes)
 	RssBytes uint64 `protobuf:"varint,1,opt,name=rss_bytes,json=rssBytes,proto3" json:"rss_bytes,omitempty"`
 	// Major page faults
 	PageFaultsMajor uint64 `protobuf:"varint,2,opt,name=page_faults_major,json=pageFaultsMajor,proto3" json:"page_faults_major,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// K8s Requests (bytes)
+	RequestBytes uint64 `protobuf:"varint,3,opt,name=request_bytes,json=requestBytes,proto3" json:"request_bytes,omitempty"`
+	// K8s Limits (bytes)
+	LimitBytes    uint64 `protobuf:"varint,4,opt,name=limit_bytes,json=limitBytes,proto3" json:"limit_bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MemoryMetrics) Reset() {
@@ -386,6 +424,20 @@ func (x *MemoryMetrics) GetRssBytes() uint64 {
 func (x *MemoryMetrics) GetPageFaultsMajor() uint64 {
 	if x != nil {
 		return x.PageFaultsMajor
+	}
+	return 0
+}
+
+func (x *MemoryMetrics) GetRequestBytes() uint64 {
+	if x != nil {
+		return x.RequestBytes
+	}
+	return 0
+}
+
+func (x *MemoryMetrics) GetLimitBytes() uint64 {
+	if x != nil {
+		return x.LimitBytes
 	}
 	return 0
 }
@@ -551,15 +603,17 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\bagent.v1\"\xe9\x01\n" +
+	"\vagent.proto\x12\bagent.v1\"\xa6\x02\n" +
 	"\rReportRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
 	"cluster_id\x18\x02 \x01(\tR\tclusterId\x12\x1b\n" +
 	"\tnode_name\x18\x03 \x01(\tR\bnodeName\x12+\n" +
 	"\x11availability_zone\x18\x04 \x01(\tR\x10availabilityZone\x12+\n" +
-	"\x11timestamp_seconds\x18\x05 \x01(\x03R\x10timestampSeconds\x12'\n" +
-	"\x04pods\x18\x06 \x03(\v2\x13.agent.v1.PodMetricR\x04pods\"Q\n" +
+	"\x11timestamp_seconds\x18\x05 \x01(\x03R\x10timestampSeconds\x12\x16\n" +
+	"\x06region\x18\x06 \x01(\tR\x06region\x12#\n" +
+	"\rinstance_type\x18\a \x01(\tR\finstanceType\x12'\n" +
+	"\x04pods\x18\b \x03(\v2\x13.agent.v1.PodMetricR\x04pods\"Q\n" +
 	"\x0eReportResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xdc\x02\n" +
@@ -572,15 +626,20 @@ const file_agent_proto_rawDesc = "" +
 	"\x03cpu\x18\x06 \x01(\v2\x14.agent.v1.CpuMetricsR\x03cpu\x12/\n" +
 	"\x06memory\x18\a \x01(\v2\x17.agent.v1.MemoryMetricsR\x06memory\x122\n" +
 	"\anetwork\x18\b \x01(\v2\x18.agent.v1.NetworkMetricsR\anetwork\x122\n" +
-	"\astorage\x18\t \x01(\v2\x18.agent.v1.StorageMetricsR\astorage\"}\n" +
+	"\astorage\x18\t \x01(\v2\x18.agent.v1.StorageMetricsR\astorage\"\xd7\x01\n" +
 	"\n" +
 	"CpuMetrics\x12\"\n" +
 	"\rusage_user_ns\x18\x01 \x01(\x04R\vusageUserNs\x12&\n" +
 	"\x0fusage_kernel_ns\x18\x02 \x01(\x04R\rusageKernelNs\x12#\n" +
-	"\rthrottling_ns\x18\x03 \x01(\x04R\fthrottlingNs\"X\n" +
+	"\rthrottling_ns\x18\x03 \x01(\x04R\fthrottlingNs\x12-\n" +
+	"\x12request_millicores\x18\x04 \x01(\x04R\x11requestMillicores\x12)\n" +
+	"\x10limit_millicores\x18\x05 \x01(\x04R\x0flimitMillicores\"\x9e\x01\n" +
 	"\rMemoryMetrics\x12\x1b\n" +
 	"\trss_bytes\x18\x01 \x01(\x04R\brssBytes\x12*\n" +
-	"\x11page_faults_major\x18\x02 \x01(\x04R\x0fpageFaultsMajor\"\xed\x01\n" +
+	"\x11page_faults_major\x18\x02 \x01(\x04R\x0fpageFaultsMajor\x12#\n" +
+	"\rrequest_bytes\x18\x03 \x01(\x04R\frequestBytes\x12\x1f\n" +
+	"\vlimit_bytes\x18\x04 \x01(\x04R\n" +
+	"limitBytes\"\xed\x01\n" +
 	"\x0eNetworkMetrics\x12\x1d\n" +
 	"\n" +
 	"bytes_sent\x18\x01 \x01(\x04R\tbytesSent\x12%\n" +

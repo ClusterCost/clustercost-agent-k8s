@@ -12,6 +12,8 @@ type AgentReport struct {
 	ClusterName      string            `json:"clusterName"`
 	NodeName         string            `json:"nodeName"`
 	AvailabilityZone string            `json:"availabilityZone"`
+	Region           string            `json:"region"`
+	InstanceType     string            `json:"instanceType"`
 	AgentID          string            `json:"agentId"`
 	Version          string            `json:"version"`
 	Timestamp        time.Time         `json:"timestamp"`

@@ -29,14 +29,18 @@ type PodMetric struct {
 }
 
 type CpuMetrics struct {
-	UsageUser   uint64 `json:"usageUserNs"`
-	UsageKernel uint64 `json:"usageKernelNs"`
-	Throttling  uint64 `json:"throttlingNs"`
+	UsageUser         uint64 `json:"usageUserNs"`
+	UsageKernel       uint64 `json:"usageKernelNs"`
+	Throttling        uint64 `json:"throttlingNs"`
+	RequestMillicores uint64 `json:"requestMillicores"`
+	LimitMillicores   uint64 `json:"limitMillicores"`
 }
 
 type MemoryMetrics struct {
-	RSS        uint64 `json:"rssBytes"`
-	PageFaults uint64 `json:"pageFaultsMajor"`
+	RSS          uint64 `json:"rssBytes"`
+	PageFaults   uint64 `json:"pageFaultsMajor"`
+	RequestBytes uint64 `json:"requestBytes"`
+	LimitBytes   uint64 `json:"limitBytes"`
 }
 
 type NetworkMetrics struct {
