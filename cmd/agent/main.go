@@ -186,8 +186,11 @@ func main() {
 		}
 	}
 
-	// Simplified Builder, no pricing/classification
-	builder := snapshot.NewBuilder(clusterID)
+	builder := snapshot.NewBuilder(snapshot.BuilderConfig{
+		ClusterID:       clusterID,
+		NetworkPricing:  cfg.Pricing.Network,
+		NetworkDetailed: cfg.Network.Detailed,
+	})
 	store := snapshot.NewStore()
 
 	// Generate Stable Agent ID based on Node Name (if available) or Cluster ID

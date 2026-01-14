@@ -19,6 +19,7 @@ message ReportRequest {
   string instance_type = 7;
 
   repeated PodMetric pods = 8;
+  repeated NetworkConnection connections = 9;
 }
 
 message ReportResponse {
@@ -83,6 +84,33 @@ message NetworkMetrics {
   uint64 egress_public_bytes = 3;
   uint64 egress_cross_az_bytes = 4;
   uint64 egress_internal_bytes = 5;
+}
+
+message NetworkConnection {
+  NetworkEndpoint src = 1;
+  NetworkEndpoint dst = 2;
+  uint32 protocol = 3;
+  uint64 bytes_sent = 4;
+  uint64 bytes_received = 5;
+  string egress_class = 6;
+  double egress_cost_usd = 7;
+  string dst_kind = 8;
+  string service_match = 9;
+  bool is_egress = 10;
+}
+
+message NetworkEndpoint {
+  string ip = 1;
+  string namespace = 2;
+  string pod_name = 3;
+  string node_name = 4;
+  string availability_zone = 5;
+  repeated ServiceRef services = 6;
+}
+
+message ServiceRef {
+  string namespace = 1;
+  string name = 2;
 }
 
 message StorageMetrics {

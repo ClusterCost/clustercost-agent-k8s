@@ -125,7 +125,9 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		// Assuming BPF does filtering or we filter here.
 		// podByIP contains all pods in cluster (from cache).
 		// We should check if Src is in podByIP.
-		if _, ok := podByIP[srcIP]; !ok {
+		_, srcIsPod := podByIP[srcIP]
+		_, dstIsPod := podByIP[dstIP]
+		if !srcIsPod && !dstIsPod {
 			continue
 		}
 
@@ -134,10 +136,11 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 			continue
 		}
 		flows = append(flows, network.Flow{
-			SrcIP:   srcIP,
-			DstIP:   dstIP,
-			TxBytes: delta.TxBytes,
-			RxBytes: delta.RxBytes,
+			SrcIP:    srcIP,
+			DstIP:    dstIP,
+			Protocol: key.Proto,
+			TxBytes:  delta.TxBytes,
+			RxBytes:  delta.RxBytes,
 		})
 	}
 

@@ -14,30 +14,33 @@ func AggregateNetworkUsage(flows []network.Flow, podByIP, nodeByIP map[netip.Add
 	result := make(map[string]kube.PodNetworkUsage)
 
 	for _, f := range flows {
-		srcPod, ok := podByIP[f.SrcIP]
-		if !ok {
-			continue
+		if srcPod, ok := podByIP[f.SrcIP]; ok {
+			class := network.ClassifyEgress(srcPod, f.DstIP, podByIP, nodeByIP)
+			keyStr := fmt.Sprintf("%s/%s", srcPod.Namespace, srcPod.Pod)
+
+			u := result[keyStr]
+			u.TxBytes += f.TxBytes
+
+			switch class {
+			case network.TrafficClassPublicInternet:
+				u.EgressPublicBytes += f.TxBytes
+			case network.TrafficClassInterAZ:
+				u.EgressCrossAZBytes += f.TxBytes
+			case network.TrafficClassIntraNode, network.TrafficClassIntraAZ, network.TrafficClassVPCPrivate:
+				u.EgressInternalBytes += f.TxBytes
+			default:
+				// Unknown is generally internal or unclassified private
+				u.EgressInternalBytes += f.TxBytes
+			}
+			result[keyStr] = u
 		}
 
-		class := network.ClassifyEgress(srcPod, f.DstIP, podByIP, nodeByIP)
-		keyStr := fmt.Sprintf("%s/%s", srcPod.Namespace, srcPod.Pod)
-
-		u := result[keyStr]
-		u.TxBytes += f.TxBytes
-		u.RxBytes += f.RxBytes
-
-		switch class {
-		case network.TrafficClassPublicInternet:
-			u.EgressPublicBytes += f.TxBytes
-		case network.TrafficClassInterAZ:
-			u.EgressCrossAZBytes += f.TxBytes
-		case network.TrafficClassIntraNode, network.TrafficClassIntraAZ, network.TrafficClassVPCPrivate:
-			u.EgressInternalBytes += f.TxBytes
-		default:
-			// Unknown is generally internal or unclassified private
-			u.EgressInternalBytes += f.TxBytes
+		if dstPod, ok := podByIP[f.DstIP]; ok {
+			keyStr := fmt.Sprintf("%s/%s", dstPod.Namespace, dstPod.Pod)
+			u := result[keyStr]
+			u.RxBytes += f.RxBytes
+			result[keyStr] = u
 		}
-		result[keyStr] = u
 	}
 	return result
 }

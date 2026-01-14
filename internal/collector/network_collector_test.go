@@ -53,6 +53,9 @@ func TestAggregateNetworkUsage(t *testing.T) {
 
 		// 7. Pod A -> Unknown Private (50 bytes) -> Internal
 		{SrcIP: podAIP, DstIP: privateIP, TxBytes: 50},
+
+		// 8. Public -> Pod A ingress (1200 bytes)
+		{SrcIP: publicIP, DstIP: podAIP, RxBytes: 1200},
 	}
 
 	usage := AggregateNetworkUsage(flows, podByIP, nodeByIP)
@@ -82,5 +85,10 @@ func TestAggregateNetworkUsage(t *testing.T) {
 	// Egress Internal: Pod B (200) + Pod C (300) + Node 1 (100) + Private (50) = 650
 	if u.EgressInternalBytes != 650 {
 		t.Errorf("EgressInternalBytes: got %d, want 650", u.EgressInternalBytes)
+	}
+
+	// Ingress: 1200 bytes from public IP
+	if u.RxBytes != 1200 {
+		t.Errorf("RxBytes: got %d, want 1200", u.RxBytes)
 	}
 }

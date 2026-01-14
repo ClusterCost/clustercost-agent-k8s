@@ -81,6 +81,9 @@ func (s *GRPCSender) toProto(r AgentReport) *agentv1.ReportRequest {
 	for _, p := range r.Snapshot.Pods {
 		req.Pods = append(req.Pods, s.podMetricToProto(p))
 	}
+	for _, c := range r.Snapshot.Connections {
+		req.Connections = append(req.Connections, s.connectionToProto(c))
+	}
 
 	return req
 }
@@ -120,4 +123,36 @@ func (s *GRPCSender) podMetricToProto(p snapshot.PodMetric) *agentv1.PodMetric {
 			TotalLatencyNs: p.Storage.TotalLatency,
 		},
 	}
+}
+
+func (s *GRPCSender) connectionToProto(c snapshot.NetworkConnection) *agentv1.NetworkConnection {
+	return &agentv1.NetworkConnection{
+		Src:           s.endpointToProto(c.Src),
+		Dst:           s.endpointToProto(c.Dst),
+		Protocol:      c.Protocol,
+		BytesSent:     c.BytesSent,
+		BytesReceived: c.BytesReceived,
+		EgressClass:   c.EgressClass,
+		EgressCostUsd: c.EgressCostUSD,
+		DstKind:       c.DstKind,
+		ServiceMatch:  c.ServiceMatch,
+		IsEgress:      c.IsEgress,
+	}
+}
+
+func (s *GRPCSender) endpointToProto(e snapshot.NetworkEndpoint) *agentv1.NetworkEndpoint {
+	endpoint := &agentv1.NetworkEndpoint{
+		Ip:               e.IP,
+		Namespace:        e.Namespace,
+		PodName:          e.PodName,
+		NodeName:         e.NodeName,
+		AvailabilityZone: e.AvailabilityZone,
+	}
+	for _, svc := range e.Services {
+		endpoint.Services = append(endpoint.Services, &agentv1.ServiceRef{
+			Namespace: svc.Namespace,
+			Name:      svc.Name,
+		})
+	}
+	return endpoint
 }

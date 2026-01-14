@@ -4,8 +4,9 @@ import "time"
 
 // Snapshot maps the agent's view of the world at a point in time.
 type Snapshot struct {
-	Timestamp time.Time   `json:"timestamp"`
-	Pods      []PodMetric `json:"pods"`
+	Timestamp   time.Time           `json:"timestamp"`
+	Pods        []PodMetric         `json:"pods"`
+	Connections []NetworkConnection `json:"connections,omitempty"`
 }
 
 // PodMetric captures telemetry for a single pod.
@@ -49,6 +50,33 @@ type NetworkMetrics struct {
 	EgressPublic   uint64 `json:"egressPublicBytes"`
 	EgressCrossAZ  uint64 `json:"egressCrossAZBytes"`
 	EgressInternal uint64 `json:"egressInternalBytes"`
+}
+
+type NetworkConnection struct {
+	Src           NetworkEndpoint `json:"src"`
+	Dst           NetworkEndpoint `json:"dst"`
+	Protocol      uint32          `json:"protocol"`
+	BytesSent     uint64          `json:"bytesSent"`
+	BytesReceived uint64          `json:"bytesReceived"`
+	EgressClass   string          `json:"egressClass"`
+	EgressCostUSD float64         `json:"egressCostUsd"`
+	DstKind       string          `json:"dstKind"`
+	ServiceMatch  string          `json:"serviceMatch"`
+	IsEgress      bool            `json:"isEgress"`
+}
+
+type NetworkEndpoint struct {
+	IP               string       `json:"ip"`
+	Namespace        string       `json:"namespace,omitempty"`
+	PodName          string       `json:"podName,omitempty"`
+	NodeName         string       `json:"nodeName,omitempty"`
+	AvailabilityZone string       `json:"availabilityZone,omitempty"`
+	Services         []ServiceRef `json:"services,omitempty"`
+}
+
+type ServiceRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
 }
 
 type StorageMetrics struct {
