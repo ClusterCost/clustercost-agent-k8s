@@ -54,11 +54,15 @@ type NetworkPricingConfig struct {
 
 // NetworkConfig configures network usage collection.
 type NetworkConfig struct {
-	Enabled    bool   `yaml:"enabled"`
-	Detailed   bool   `yaml:"detailed"`
-	BPFMapPath string `yaml:"bpfMapPath"`
-	ObjectPath string `yaml:"objectPath"`
-	CgroupPath string `yaml:"cgroupPath"`
+	Enabled         bool   `yaml:"enabled"`
+	Detailed        bool   `yaml:"detailed"`
+	DNSCapture      bool   `yaml:"dnsCapture"`
+	BPFMapPath      string `yaml:"bpfMapPath"`
+	DNSMapPath      string `yaml:"dnsMapPath"`
+	DNSCacheEntries int    `yaml:"dnsCacheEntries"`
+	DNSSampleRate   int    `yaml:"dnsSampleRate"`
+	ObjectPath      string `yaml:"objectPath"`
+	CgroupPath      string `yaml:"cgroupPath"`
 }
 
 // MetricsConfig configures eBPF-based usage collection.
@@ -121,11 +125,15 @@ func DefaultConfig() Config {
 			},
 		},
 		Network: NetworkConfig{
-			Enabled:    false,
-			Detailed:   false,
-			BPFMapPath: "/sys/fs/bpf/clustercost/flows",
-			ObjectPath: "/opt/clustercost/bpf/flows.bpf.o",
-			CgroupPath: "/sys/fs/cgroup",
+			Enabled:         true,
+			Detailed:        true,
+			DNSCapture:      true,
+			BPFMapPath:      "/sys/fs/bpf/clustercost/flows",
+			DNSMapPath:      "/sys/fs/bpf/clustercost/dns_events",
+			DNSCacheEntries: 10000,
+			DNSSampleRate:   100,
+			ObjectPath:      "/opt/clustercost/bpf/flows.bpf.o",
+			CgroupPath:      "/sys/fs/cgroup",
 		},
 		Metrics: MetricsConfig{
 			Enabled:    true,
@@ -204,7 +212,11 @@ func Load() (Config, error) {
 	fs.Float64Var(&cfg.Pricing.MemoryGiBHourPriceUSD, "memory-price", cfg.Pricing.MemoryGiBHourPriceUSD, "Memory GiB hour price in USD")
 	fs.BoolVar(&cfg.Network.Enabled, "enable-network-cost", cfg.Network.Enabled, "Enable eBPF-based network cost collection")
 	fs.BoolVar(&cfg.Network.Detailed, "enable-network-detailed", cfg.Network.Detailed, "Enable detailed network connection reporting")
+	fs.BoolVar(&cfg.Network.DNSCapture, "enable-network-dns", cfg.Network.DNSCapture, "Enable DNS capture for network connections")
 	fs.StringVar(&cfg.Network.BPFMapPath, "ebpf-map-path", cfg.Network.BPFMapPath, "Pinned eBPF map path for network flow stats")
+	fs.StringVar(&cfg.Network.DNSMapPath, "ebpf-dns-map-path", cfg.Network.DNSMapPath, "Pinned eBPF map path for DNS events")
+	fs.IntVar(&cfg.Network.DNSCacheEntries, "network-dns-cache-entries", cfg.Network.DNSCacheEntries, "Max DNS cache entries in memory")
+	fs.IntVar(&cfg.Network.DNSSampleRate, "network-dns-sample-rate", cfg.Network.DNSSampleRate, "DNS sample rate percent (1-100)")
 	fs.StringVar(&cfg.Network.ObjectPath, "ebpf-net-object", cfg.Network.ObjectPath, "Path to eBPF network object file")
 	fs.StringVar(&cfg.Network.CgroupPath, "ebpf-net-cgroup-path", cfg.Network.CgroupPath, "Cgroup path for eBPF network attachment")
 	fs.Float64Var(&cfg.Pricing.Network.DefaultEgressGiBPriceUSD, "network-egress-price", cfg.Pricing.Network.DefaultEgressGiBPriceUSD, "Default network egress price per GiB in USD")
@@ -285,7 +297,39 @@ func loadFromFile(path string, cfg *Config) error {
 	}
 
 	mergeConfigs(cfg, Config(fileCfg))
+	applyExplicitOverrides(cfg, Config(fileCfg), data)
 	return nil
+}
+
+func applyExplicitOverrides(base *Config, override Config, raw []byte) {
+	var rawCfg map[string]any
+	if err := yaml.Unmarshal(raw, &rawCfg); err != nil {
+		return
+	}
+
+	if networkRaw, ok := rawCfg["network"].(map[string]any); ok {
+		if _, ok := networkRaw["enabled"]; ok {
+			base.Network.Enabled = override.Network.Enabled
+		}
+		if _, ok := networkRaw["detailed"]; ok {
+			base.Network.Detailed = override.Network.Detailed
+		}
+		if _, ok := networkRaw["dnsCapture"]; ok {
+			base.Network.DNSCapture = override.Network.DNSCapture
+		}
+		if _, ok := networkRaw["dnsCacheEntries"]; ok {
+			base.Network.DNSCacheEntries = override.Network.DNSCacheEntries
+		}
+		if _, ok := networkRaw["dnsSampleRate"]; ok {
+			base.Network.DNSSampleRate = override.Network.DNSSampleRate
+		}
+	}
+
+	if metricsRaw, ok := rawCfg["metrics"].(map[string]any); ok {
+		if _, ok := metricsRaw["enabled"]; ok {
+			base.Metrics.Enabled = override.Metrics.Enabled
+		}
+	}
 }
 
 func mergeConfigs(base *Config, override Config) {
@@ -413,8 +457,26 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Network.Detailed = bv
 		}
 	}
+	if v := os.Getenv("CLUSTERCOST_NETWORK_DNS_CAPTURE"); v != "" {
+		if bv, err := strconv.ParseBool(v); err == nil {
+			cfg.Network.DNSCapture = bv
+		}
+	}
 	if v := os.Getenv("CLUSTERCOST_EBPF_MAP_PATH"); v != "" {
 		cfg.Network.BPFMapPath = v
+	}
+	if v := os.Getenv("CLUSTERCOST_EBPF_DNS_MAP_PATH"); v != "" {
+		cfg.Network.DNSMapPath = v
+	}
+	if v := os.Getenv("CLUSTERCOST_NETWORK_DNS_CACHE_ENTRIES"); v != "" {
+		if iv, err := strconv.Atoi(v); err == nil {
+			cfg.Network.DNSCacheEntries = iv
+		}
+	}
+	if v := os.Getenv("CLUSTERCOST_NETWORK_DNS_SAMPLE_RATE"); v != "" {
+		if iv, err := strconv.Atoi(v); err == nil {
+			cfg.Network.DNSSampleRate = iv
+		}
 	}
 	if v := os.Getenv("CLUSTERCOST_EBPF_NET_OBJECT"); v != "" {
 		cfg.Network.ObjectPath = v
@@ -436,6 +498,13 @@ func applyEnvOverrides(cfg *Config) {
 		if bv, err := strconv.ParseBool(v); err == nil {
 			cfg.Metrics.Enabled = bv
 		}
+	}
+
+	if cfg.Network.DNSSampleRate < 0 {
+		cfg.Network.DNSSampleRate = 0
+	}
+	if cfg.Network.DNSSampleRate > 100 {
+		cfg.Network.DNSSampleRate = 100
 	}
 	if v := os.Getenv("CLUSTERCOST_EBPF_METRICS_MAP_PATH"); v != "" {
 		cfg.Metrics.BPFMapPath = v
@@ -594,8 +663,20 @@ func mergeNetworkConfig(base *NetworkConfig, override NetworkConfig) {
 	if override.Detailed {
 		base.Detailed = override.Detailed
 	}
+	if override.DNSCapture {
+		base.DNSCapture = override.DNSCapture
+	}
 	if override.BPFMapPath != "" {
 		base.BPFMapPath = override.BPFMapPath
+	}
+	if override.DNSMapPath != "" {
+		base.DNSMapPath = override.DNSMapPath
+	}
+	if override.DNSCacheEntries != 0 {
+		base.DNSCacheEntries = override.DNSCacheEntries
+	}
+	if override.DNSSampleRate != 0 {
+		base.DNSSampleRate = override.DNSSampleRate
 	}
 	if override.ObjectPath != "" {
 		base.ObjectPath = override.ObjectPath

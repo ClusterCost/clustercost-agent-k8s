@@ -20,6 +20,7 @@ message ReportRequest {
 
   repeated PodMetric pods = 8;
   repeated NetworkConnection connections = 9;
+  repeated NodeMetric nodes = 10;
 }
 
 message ReportResponse {
@@ -99,6 +100,18 @@ message NetworkConnection {
   bool is_egress = 10;
 }
 
+message NodeMetric {
+  string node_name = 1;
+  uint64 cpu_usage_millicores = 2;
+  uint64 memory_usage_bytes = 3;
+  uint64 capacity_cpu_millicores = 4;
+  uint64 capacity_memory_bytes = 5;
+  uint64 allocatable_cpu_millicores = 6;
+  uint64 allocatable_memory_bytes = 7;
+  uint64 requested_cpu_millicores = 8;
+  uint64 requested_memory_bytes = 9;
+}
+
 message NetworkEndpoint {
   string ip = 1;
   string namespace = 2;
@@ -106,6 +119,7 @@ message NetworkEndpoint {
   string node_name = 4;
   string availability_zone = 5;
   repeated ServiceRef services = 6;
+  string dns_name = 7;
 }
 
 message ServiceRef {

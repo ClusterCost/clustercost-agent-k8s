@@ -84,6 +84,9 @@ func (s *GRPCSender) toProto(r AgentReport) *agentv1.ReportRequest {
 	for _, c := range r.Snapshot.Connections {
 		req.Connections = append(req.Connections, s.connectionToProto(c))
 	}
+	for _, n := range r.Snapshot.Nodes {
+		req.Nodes = append(req.Nodes, s.nodeMetricToProto(n))
+	}
 
 	return req
 }
@@ -143,6 +146,7 @@ func (s *GRPCSender) connectionToProto(c snapshot.NetworkConnection) *agentv1.Ne
 func (s *GRPCSender) endpointToProto(e snapshot.NetworkEndpoint) *agentv1.NetworkEndpoint {
 	endpoint := &agentv1.NetworkEndpoint{
 		Ip:               e.IP,
+		DnsName:          e.DnsName,
 		Namespace:        e.Namespace,
 		PodName:          e.PodName,
 		NodeName:         e.NodeName,
@@ -155,4 +159,18 @@ func (s *GRPCSender) endpointToProto(e snapshot.NetworkEndpoint) *agentv1.Networ
 		})
 	}
 	return endpoint
+}
+
+func (s *GRPCSender) nodeMetricToProto(n snapshot.NodeMetric) *agentv1.NodeMetric {
+	return &agentv1.NodeMetric{
+		NodeName:                 n.NodeName,
+		CpuUsageMillicores:       n.CPUUsageMillicores,
+		MemoryUsageBytes:         n.MemoryUsageBytes,
+		CapacityCpuMillicores:    n.CapacityCPUMilli,
+		CapacityMemoryBytes:      n.CapacityMemoryBytes,
+		AllocatableCpuMillicores: n.AllocatableCPUMilli,
+		AllocatableMemoryBytes:   n.AllocatableMemBytes,
+		RequestedCpuMillicores:   n.RequestedCPUMilli,
+		RequestedMemoryBytes:     n.RequestedMemBytes,
+	}
 }

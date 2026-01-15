@@ -69,6 +69,12 @@ type PodUsage struct {
 	StorageTotalLatency uint64
 }
 
+// NodeUsage captures node-level CPU and memory usage.
+type NodeUsage struct {
+	CPUUsageMilli    int64
+	MemoryUsageBytes int64
+}
+
 // PodNetworkUsage captures per-pod network usage and classification.
 type PodNetworkUsage struct {
 	TxBytes uint64

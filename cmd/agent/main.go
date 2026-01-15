@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"os"
 	"os/signal"
 	"syscall"
@@ -118,9 +119,10 @@ func main() {
 		logger.Info("running in node scope", slog.String("nodeName", nodeName))
 	} else {
 		if cfg.Metrics.Enabled || cfg.Network.Enabled {
-			// eBPF usually requires node-scope to map pids
-			logger.Error("node name is required for eBPF collectors; set NODE_NAME or --node-name")
-			os.Exit(1)
+			// eBPF typically needs node scope; fall back to disabling collectors.
+			logger.Warn("node name missing; disabling eBPF collectors", slog.String("hint", "set NODE_NAME or --node-name"))
+			cfg.Metrics.Enabled = false
+			cfg.Network.Enabled = false
 		}
 		logger.Warn("node name not set; using cluster-wide view")
 	}
@@ -158,6 +160,11 @@ func main() {
 		Enabled:    cfg.Network.Enabled,
 		BPFMapPath: cfg.Network.BPFMapPath,
 	}, logger)
+	nodeMetricsCollector := collector.NewNodeMetricsCollector(kubeClient.Metrics, logger)
+	dnsCache := collector.NewDNSCache(cfg.Network, logger)
+	if dnsCache != nil {
+		go dnsCache.Run(ctx)
+	}
 
 	var sender forwarder.Forwarder
 	var queue *forwarder.Queue
@@ -202,7 +209,7 @@ func main() {
 	}
 	logger.Info("agent id generated", slog.String("agentId", agentID), slog.String("scope", "stable-node-identity"))
 
-	go runSnapshotLoop(ctx, builder, cache, metricsCollector, networkCollector, queue, clusterID, clusterName, nodeName, agentID, agentVersion, store, cfg.ScrapeInterval(), logger)
+	go runSnapshotLoop(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, clusterID, clusterName, nodeName, agentID, agentVersion, store, cfg.ScrapeInterval(), logger)
 
 	apiHandler := api.NewHandler(clusterType, clusterName, clusterRegion, agentVersion, agentID, store)
 	mux := http.NewServeMux()
@@ -216,12 +223,12 @@ func main() {
 	}
 }
 
-func runSnapshotLoop(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, interval time.Duration, logger *slog.Logger) {
+func runSnapshotLoop(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, interval time.Duration, logger *slog.Logger) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
-		if err := buildOnce(ctx, builder, cache, metricsCollector, networkCollector, queue, clusterID, clusterName, nodeName, agentID, version, store, logger); err != nil {
+		if err := buildOnce(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, clusterID, clusterName, nodeName, agentID, version, store, logger); err != nil {
 			logger.Warn("snapshot refresh failed", slog.String("error", err.Error()))
 		}
 
@@ -233,7 +240,7 @@ func runSnapshotLoop(ctx context.Context, builder *snapshot.Builder, cache *kube
 	}
 }
 
-func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, logger *slog.Logger) error {
+func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, logger *slog.Logger) error {
 	nodes, err := cache.NodeLister().List(labels.Everything())
 	if err != nil {
 		return err
@@ -293,7 +300,22 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 		logger.Warn("network usage collection failed", slog.String("error", networkErr.Error()))
 	}
 
-	store.Update(builder.Build(nodes, namespaces, pods, services, endpoints, usage, networkCollection, time.Now().UTC()))
+	nodeMetricsCtx, cancelNodeMetrics := context.WithTimeout(ctx, 15*time.Second)
+	nodeUsage, nodeMetricsErr := nodeMetricsCollector.CollectNodeMetrics(nodeMetricsCtx, nodes)
+	cancelNodeMetrics()
+	if nodeMetricsErr != nil {
+		logger.Warn("node metrics collection failed", slog.String("error", nodeMetricsErr.Error()))
+	}
+	if nodeUsage == nil {
+		nodeUsage = map[string]kube.NodeUsage{}
+	}
+
+	dnsNames := map[netip.Addr]string{}
+	if dnsCache != nil {
+		dnsNames = dnsCache.Snapshot()
+	}
+
+	store.Update(builder.Build(nodes, namespaces, pods, services, endpoints, usage, networkCollection, nodeUsage, dnsNames, time.Now().UTC()))
 
 	if queue != nil {
 		report := forwarder.AgentReport{

@@ -99,6 +99,12 @@ spec:
               value: "true"
             - name: CLUSTERCOST_NETWORK_ENABLED
               value: "true"
+            - name: CLUSTERCOST_NETWORK_DETAILED
+              value: "true"
+            - name: CLUSTERCOST_NETWORK_DNS_CAPTURE
+              value: "true"
+            - name: CLUSTERCOST_NETWORK_DNS_SAMPLE_RATE
+              value: "100"
             - name: CLUSTERCOST_EBPF_METRICS_MAP_PATH
               value: "/sys/fs/bpf/clustercost/metrics"
             - name: CLUSTERCOST_EBPF_MAP_PATH

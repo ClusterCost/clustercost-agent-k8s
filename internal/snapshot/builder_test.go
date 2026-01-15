@@ -61,7 +61,7 @@ func TestBuilder_Build_RequestsLimits(t *testing.T) {
 	usage := map[string]kube.PodUsage{}
 	netColl := collector.NetworkCollection{}
 
-	snap := builder.Build(nodes, nil, pods, nil, nil, usage, netColl, time.Now())
+	snap := builder.Build(nodes, nil, pods, nil, nil, usage, netColl, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
 
 	if len(snap.Pods) != 1 {
 		t.Fatalf("expected 1 pod, got %d", len(snap.Pods))
@@ -133,7 +133,7 @@ func TestBuilder_Build_NetworkConnectionServiceIntent(t *testing.T) {
 	}
 
 	netColl := collector.NetworkCollection{Flows: flows}
-	snap := builder.Build(nodes, nil, pods, services, nil, map[string]kube.PodUsage{}, netColl, time.Now())
+	snap := builder.Build(nodes, nil, pods, services, nil, map[string]kube.PodUsage{}, netColl, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
 
 	if len(snap.Connections) != 1 {
 		t.Fatalf("expected 1 connection, got %d", len(snap.Connections))
@@ -257,7 +257,7 @@ func TestBuilder_Build_NetworkConnectionIntentScenarios(t *testing.T) {
 		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("8.8.8.8"), TxBytes: 700},      // external
 	}
 
-	snap := builder.Build(nodes, nil, []*corev1.Pod{srcPod, dstPod}, []*corev1.Service{serviceA, serviceB}, endpoints, map[string]kube.PodUsage{}, collector.NetworkCollection{Flows: flows}, time.Now())
+	snap := builder.Build(nodes, nil, []*corev1.Pod{srcPod, dstPod}, []*corev1.Service{serviceA, serviceB}, endpoints, map[string]kube.PodUsage{}, collector.NetworkCollection{Flows: flows}, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
 
 	if len(snap.Connections) != len(flows) {
 		t.Fatalf("expected %d connections, got %d", len(flows), len(snap.Connections))

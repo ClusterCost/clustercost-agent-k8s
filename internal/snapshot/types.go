@@ -6,6 +6,7 @@ import "time"
 type Snapshot struct {
 	Timestamp   time.Time           `json:"timestamp"`
 	Pods        []PodMetric         `json:"pods"`
+	Nodes       []NodeMetric        `json:"nodes,omitempty"`
 	Connections []NetworkConnection `json:"connections,omitempty"`
 }
 
@@ -67,11 +68,24 @@ type NetworkConnection struct {
 
 type NetworkEndpoint struct {
 	IP               string       `json:"ip"`
+	DnsName          string       `json:"dnsName,omitempty"`
 	Namespace        string       `json:"namespace,omitempty"`
 	PodName          string       `json:"podName,omitempty"`
 	NodeName         string       `json:"nodeName,omitempty"`
 	AvailabilityZone string       `json:"availabilityZone,omitempty"`
 	Services         []ServiceRef `json:"services,omitempty"`
+}
+
+type NodeMetric struct {
+	NodeName            string `json:"nodeName"`
+	CPUUsageMillicores  uint64 `json:"cpuUsageMillicores"`
+	MemoryUsageBytes    uint64 `json:"memoryUsageBytes"`
+	CapacityCPUMilli    uint64 `json:"capacityCpuMillicores"`
+	CapacityMemoryBytes uint64 `json:"capacityMemoryBytes"`
+	AllocatableCPUMilli uint64 `json:"allocatableCpuMillicores"`
+	AllocatableMemBytes uint64 `json:"allocatableMemoryBytes"`
+	RequestedCPUMilli   uint64 `json:"requestedCpuMillicores"`
+	RequestedMemBytes   uint64 `json:"requestedMemoryBytes"`
 }
 
 type ServiceRef struct {

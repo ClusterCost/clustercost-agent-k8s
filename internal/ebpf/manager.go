@@ -160,6 +160,29 @@ func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {
 			}
 		}
 	}
+	if mp := collection.Maps["clustercost_dns_config"]; mp != nil {
+		sample := uint32(cfg.DNSSampleRate)
+		if sample > 100 {
+			sample = 100
+		}
+		key := uint32(0)
+		if err := mp.Put(key, sample); err != nil {
+			return fmt.Errorf("set dns sample rate: %w", err)
+		}
+	}
+	if cfg.DNSCapture && cfg.DNSMapPath != "" {
+		if mp := collection.Maps["clustercost_dns_events"]; mp != nil {
+			if err := os.MkdirAll(filepath.Dir(cfg.DNSMapPath), 0o750); err != nil {
+				return fmt.Errorf("create dns map dir: %w", err)
+			}
+			if _, err := os.Stat(cfg.DNSMapPath); err == nil {
+				_ = os.Remove(cfg.DNSMapPath)
+			}
+			if err := mp.Pin(cfg.DNSMapPath); err != nil {
+				return fmt.Errorf("pin dns map: %w", err)
+			}
+		}
+	}
 
 	cgroupPath := cfg.CgroupPath
 	if cgroupPath == "" {

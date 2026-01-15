@@ -39,7 +39,7 @@ func NewBuilder(cfg BuilderConfig) *Builder {
 }
 
 // Build assembles a snapshot using the cached kubernetes objects and usage metrics.
-func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, pods []*corev1.Pod, services []*corev1.Service, endpoints []*discoveryv1.EndpointSlice, usage map[string]kube.PodUsage, networkCollection collector.NetworkCollection, generatedAt time.Time) Snapshot {
+func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, pods []*corev1.Pod, services []*corev1.Service, endpoints []*discoveryv1.EndpointSlice, usage map[string]kube.PodUsage, networkCollection collector.NetworkCollection, nodeUsage map[string]kube.NodeUsage, dnsNames map[netip.Addr]string, generatedAt time.Time) Snapshot {
 
 	// 1. Prepare Network Data (IP mappings)
 	// We need to resolve IPs to find traffic categories (CrossAZ, Public, Internal)
@@ -163,17 +163,20 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 
 	connections := []NetworkConnection{}
 	if b.networkDetailed && len(networkCollection.Flows) > 0 {
-		connections = b.buildNetworkConnections(networkCollection.Flows, podInfoByIP, nodeByIP, services, endpoints)
+		connections = b.buildNetworkConnections(networkCollection.Flows, podInfoByIP, nodeByIP, services, endpoints, dnsNames)
 	}
+
+	nodeMetrics := buildNodeMetrics(nodes, pods, nodeUsage)
 
 	return Snapshot{
 		Timestamp:   generatedAt,
 		Pods:        podMetrics,
+		Nodes:       nodeMetrics,
 		Connections: connections,
 	}
 }
 
-func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByIP map[netip.Addr]network.PodInfo, services []*corev1.Service, endpoints []*discoveryv1.EndpointSlice) []NetworkConnection {
+func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByIP map[netip.Addr]network.PodInfo, services []*corev1.Service, endpoints []*discoveryv1.EndpointSlice, dnsNames map[netip.Addr]string) []NetworkConnection {
 	serviceByIP := buildServiceIPIndex(services)
 	endpointServiceByIP := buildEndpointServiceIndex(endpoints)
 
@@ -182,8 +185,8 @@ func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByI
 		if flow.TxBytes == 0 && flow.RxBytes == 0 {
 			continue
 		}
-		src := resolveEndpoint(flow.SrcIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP)
-		dst := resolveEndpoint(flow.DstIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP)
+		src := resolveEndpoint(flow.SrcIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP, dnsNames)
+		dst := resolveEndpoint(flow.DstIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP, dnsNames)
 		dstKind, serviceMatch := classifyDestination(flow.DstIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP)
 
 		class := network.TrafficClassUnknown
@@ -212,6 +215,61 @@ func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByI
 	}
 
 	return connections
+}
+
+type nodeRequestTotals struct {
+	cpuMilli    int64
+	memoryBytes int64
+}
+
+func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string]kube.NodeUsage) []NodeMetric {
+	requests := aggregateNodeRequests(pods)
+	metrics := make([]NodeMetric, 0, len(nodes))
+	for _, node := range nodes {
+		if node == nil || node.Name == "" {
+			continue
+		}
+		req := requests[node.Name]
+		current := usage[node.Name]
+		metrics = append(metrics, NodeMetric{
+			NodeName:            node.Name,
+			CPUUsageMillicores:  clampUint64(current.CPUUsageMilli),
+			MemoryUsageBytes:    clampUint64(current.MemoryUsageBytes),
+			CapacityCPUMilli:    clampUint64(node.Status.Capacity.Cpu().MilliValue()),
+			CapacityMemoryBytes: clampUint64(node.Status.Capacity.Memory().Value()),
+			AllocatableCPUMilli: clampUint64(node.Status.Allocatable.Cpu().MilliValue()),
+			AllocatableMemBytes: clampUint64(node.Status.Allocatable.Memory().Value()),
+			RequestedCPUMilli:   clampUint64(req.cpuMilli),
+			RequestedMemBytes:   clampUint64(req.memoryBytes),
+		})
+	}
+	return metrics
+}
+
+func aggregateNodeRequests(pods []*corev1.Pod) map[string]nodeRequestTotals {
+	result := make(map[string]nodeRequestTotals)
+	for _, pod := range pods {
+		if pod == nil || pod.Spec.NodeName == "" {
+			continue
+		}
+		var podCPU, podMem int64
+		for _, c := range pod.Spec.Containers {
+			podCPU += c.Resources.Requests.Cpu().MilliValue()
+			podMem += c.Resources.Requests.Memory().Value()
+		}
+		totals := result[pod.Spec.NodeName]
+		totals.cpuMilli += podCPU
+		totals.memoryBytes += podMem
+		result[pod.Spec.NodeName] = totals
+	}
+	return result
+}
+
+func clampUint64(value int64) uint64 {
+	if value <= 0 {
+		return 0
+	}
+	return uint64(value)
 }
 
 type serviceMatch struct {
@@ -309,8 +367,11 @@ func buildEndpointServiceIndex(endpoints []*discoveryv1.EndpointSlice) map[netip
 	return result
 }
 
-func resolveEndpoint(ip netip.Addr, podByIP, nodeByIP map[netip.Addr]network.PodInfo, serviceByIP, endpointServiceByIP map[netip.Addr][]serviceMatch) NetworkEndpoint {
+func resolveEndpoint(ip netip.Addr, podByIP, nodeByIP map[netip.Addr]network.PodInfo, serviceByIP, endpointServiceByIP map[netip.Addr][]serviceMatch, dnsNames map[netip.Addr]string) NetworkEndpoint {
 	endpoint := NetworkEndpoint{IP: ip.String()}
+	if name, ok := dnsNames[ip]; ok && name != "" {
+		endpoint.DnsName = name
+	}
 	if pod, ok := podByIP[ip]; ok {
 		endpoint.Namespace = pod.Namespace
 		endpoint.PodName = pod.Pod
