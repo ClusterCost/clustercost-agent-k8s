@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -40,12 +42,15 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	clusterID := cfg.ClusterID
 	const clusterType = "k8s"
 	clusterName := cfg.ClusterName
 	if override := os.Getenv("CLUSTER_NAME"); override != "" {
 		clusterName = override
 		logger.Info("cluster name override from env", slog.String("clusterName", clusterName))
+	}
+	const placeholderName = "kubernetes"
+	if clusterName == placeholderName {
+		clusterName = ""
 	}
 	kubeClient, err := kube.NewClient(clusterName, cfg.KubeconfigPath)
 	if err != nil {
@@ -53,40 +58,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	const placeholderName = "kubernetes"
-	const unknownClusterName = "unknown"
-
 	if clusterName == "" || clusterName == placeholderName {
 		detectCtx, cancelDetect := context.WithTimeout(ctx, 10*time.Second)
 		if detectedName, err := kube.DetectClusterName(detectCtx, kubeClient.Kubernetes); err == nil && detectedName != "" {
 			clusterName = detectedName
 			kubeClient.ClusterName = detectedName
-			if clusterID == "" || clusterID == placeholderName {
-				clusterID = detectedName
-			}
 			logger.Info("detected cluster name", slog.String("clusterName", detectedName))
 		} else if err != nil {
 			logger.Warn("failed to detect cluster name", slog.String("error", err.Error()))
 		}
 		cancelDetect()
-
-		if clusterName == "" || clusterName == placeholderName {
-			clusterName = unknownClusterName
-			logger.Info("defaulting cluster name to unknown")
-		}
-		if clusterID == "" || clusterID == placeholderName {
-			// Try to get a stable ID from kube-system namespace
-			if id, err := kube.GetClusterID(ctx, kubeClient.Kubernetes); err == nil && id != "" {
-				clusterID = id
-				logger.Info("using kube-system namespace uid as cluster id", slog.String("content", id))
-			} else {
-				clusterID = clusterName
-				logger.Warn("failed to get stable cluster id", slog.String("error", err.Error()))
-			}
-		}
 	}
 
-	clusterRegion := cfg.Pricing.Region // Keeping config field for compatibility, but not using logic
+	clusterID, err := kube.GetClusterID(ctx, kubeClient.Kubernetes)
+	if err != nil || clusterID == "" {
+		if err == nil {
+			err = errors.New("cluster id empty")
+		}
+		logger.Error("failed to get stable cluster id", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+	logger.Info("using kube-system namespace uid as cluster id", slog.String("content", clusterID))
+
+	clusterRegion := ""
 	regionCtx, cancelRegion := context.WithTimeout(ctx, 10*time.Second)
 	if detectedRegion, err := kube.DetectClusterRegion(regionCtx, kubeClient.Kubernetes); err == nil && detectedRegion != "" {
 		clusterRegion = detectedRegion
@@ -111,21 +105,28 @@ func main() {
 		}
 	}
 	if nodeName == "" {
-		if host, err := os.Hostname(); err == nil && host != "" {
-			nodeName = host
+		podName := os.Getenv("POD_NAME")
+		if podName == "" {
+			if host, err := os.Hostname(); err == nil && host != "" {
+				podName = host
+			}
 		}
-	}
-	if nodeName != "" {
-		logger.Info("running in node scope", slog.String("nodeName", nodeName))
-	} else {
-		if cfg.Metrics.Enabled || cfg.Network.Enabled {
-			// eBPF typically needs node scope; fall back to disabling collectors.
-			logger.Warn("node name missing; disabling eBPF collectors", slog.String("hint", "set NODE_NAME or --node-name"))
-			cfg.Metrics.Enabled = false
-			cfg.Network.Enabled = false
+		podNamespace := os.Getenv("POD_NAMESPACE")
+		if podNamespace == "" {
+			if ns, err := readServiceAccountNamespace(); err == nil && ns != "" {
+				podNamespace = ns
+			}
 		}
-		logger.Warn("node name not set; using cluster-wide view")
+		detectCtx, cancelDetect := context.WithTimeout(ctx, 10*time.Second)
+		detectedNode, err := kube.DetectNodeNameFromPod(detectCtx, kubeClient.Kubernetes, podNamespace, podName)
+		cancelDetect()
+		if err != nil {
+			logger.Error("failed to detect node name from pod", slog.String("error", err.Error()), slog.String("hint", "set NODE_NAME or --node-name"))
+			os.Exit(1)
+		}
+		nodeName = detectedNode
 	}
+	logger.Info("running in node scope", slog.String("nodeName", nodeName))
 
 	cache := kube.NewClusterCache(kubeClient.Kubernetes, 0)
 	if err := cache.Start(ctx); err != nil {
@@ -133,20 +134,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	if cfg.Metrics.Enabled || cfg.Network.Enabled {
+	if cfg.Network.Enabled {
 		report := ebpf.Preflight(cfg, logger)
 		if report.HasErrors() {
 			for _, issue := range report.Issues {
 				logger.Error("eBPF preflight failed", slog.String("component", issue.Component), slog.String("error", issue.Message))
 			}
-			logger.Warn("disabling eBPF collectors due to preflight errors")
-			cfg.Metrics.Enabled = false
+			logger.Warn("disabling eBPF network collector due to preflight errors")
 			cfg.Network.Enabled = false
 		}
 	}
 
 	var ebpfMgr *ebpf.Manager
-	if cfg.Metrics.Enabled || cfg.Network.Enabled {
+	if cfg.Network.Enabled {
 		ebpfMgr, err = ebpf.Start(cfg, logger)
 		if err != nil {
 			logger.Error("failed to start eBPF programs", slog.String("error", err.Error()))
@@ -160,7 +160,7 @@ func main() {
 		Enabled:    cfg.Network.Enabled,
 		BPFMapPath: cfg.Network.BPFMapPath,
 	}, logger)
-	nodeMetricsCollector := collector.NewNodeMetricsCollector(cfg.Metrics, nodeName, kubeClient.Metrics, logger)
+	nodeMetricsCollector := collector.NewNodeMetricsCollector(cfg.Metrics, nodeName, logger)
 	dnsCache := collector.NewDNSCache(cfg.Network, logger)
 	if dnsCache != nil {
 		go dnsCache.Run(ctx)
@@ -195,7 +195,6 @@ func main() {
 
 	builder := snapshot.NewBuilder(snapshot.BuilderConfig{
 		ClusterID:       clusterID,
-		NetworkPricing:  cfg.Pricing.Network,
 		NetworkDetailed: cfg.Network.Detailed,
 	})
 	store := snapshot.NewStore()
@@ -262,25 +261,29 @@ func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.Clust
 		return err
 	}
 
-	var availabilityZone, region, instanceType string
-	if nodeName != "" {
-		nodes = filterNodes(nodes, nodeName)
-		pods = filterPods(pods, nodeName)
-		if len(nodes) > 0 {
-			labels := nodes[0].Labels
-			availabilityZone = labels["topology.kubernetes.io/zone"]
-			if availabilityZone == "" {
-				availabilityZone = labels["failure-domain.beta.kubernetes.io/zone"]
-			}
-			region = labels["topology.kubernetes.io/region"]
-			if region == "" {
-				region = labels["failure-domain.beta.kubernetes.io/region"]
-			}
-			instanceType = labels["node.kubernetes.io/instance-type"]
-			if instanceType == "" {
-				instanceType = labels["beta.kubernetes.io/instance-type"]
-			}
-		}
+	if nodeName == "" {
+		return errors.New("node name is required in node-only mode")
+	}
+
+	nodes = filterNodes(nodes, nodeName)
+	pods = filterPods(pods, nodeName)
+
+	if len(nodes) == 0 {
+		return fmt.Errorf("node %q not found in cache", nodeName)
+	}
+
+	labels := nodes[0].Labels
+	availabilityZone := labels["topology.kubernetes.io/zone"]
+	if availabilityZone == "" {
+		availabilityZone = labels["failure-domain.beta.kubernetes.io/zone"]
+	}
+	region := labels["topology.kubernetes.io/region"]
+	if region == "" {
+		region = labels["failure-domain.beta.kubernetes.io/region"]
+	}
+	instanceType := labels["node.kubernetes.io/instance-type"]
+	if instanceType == "" {
+		instanceType = labels["beta.kubernetes.io/instance-type"]
 	}
 
 	metricsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -349,6 +352,14 @@ func filterNodes(nodes []*corev1.Node, nodeName string) []*corev1.Node {
 		}
 	}
 	return filtered
+}
+
+func readServiceAccountNamespace() (string, error) {
+	data, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 func filterPods(pods []*corev1.Pod, nodeName string) []*corev1.Pod {

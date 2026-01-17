@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"clustercost-agent-k8s/internal/collector"
-	"clustercost-agent-k8s/internal/config"
 	"clustercost-agent-k8s/internal/kube"
 	"clustercost-agent-k8s/internal/network"
 
@@ -18,14 +17,12 @@ import (
 // BuilderConfig captures snapshot builder configuration.
 type BuilderConfig struct {
 	ClusterID       string
-	NetworkPricing  config.NetworkPricingConfig
 	NetworkDetailed bool
 }
 
 // Builder converts informer/lister state into the public snapshot model.
 type Builder struct {
 	clusterID       string
-	networkPricing  config.NetworkPricingConfig
 	networkDetailed bool
 }
 
@@ -33,7 +30,6 @@ type Builder struct {
 func NewBuilder(cfg BuilderConfig) *Builder {
 	return &Builder{
 		clusterID:       cfg.ClusterID,
-		networkPricing:  cfg.NetworkPricing,
 		networkDetailed: cfg.NetworkDetailed,
 	}
 }
@@ -130,11 +126,9 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 			PodName:     pod.Name,
 
 			Cpu: CpuMetrics{
-				UsageUser:         podUsage.CPUUsageUserNs,
-				UsageKernel:       podUsage.CPUUsageKernelNs,
-				Throttling:        podUsage.CPUThrottlingNs,
 				RequestMillicores: sumCPU(pod.Spec.Containers, true),
 				LimitMillicores:   sumCPU(pod.Spec.Containers, false),
+				UsageMillicores:   clampUint64(podUsage.CPUUsageMilli),
 			},
 			Memory: MemoryMetrics{
 				RSS:          podUsage.MemoryRSS,
@@ -190,11 +184,9 @@ func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByI
 		dstKind, serviceMatch := classifyDestination(flow.DstIP, podByIP, nodeByIP, serviceByIP, endpointServiceByIP)
 
 		class := network.TrafficClassUnknown
-		costUSD := 0.0
 		isEgress := false
 		if srcPod, ok := podByIP[flow.SrcIP]; ok {
 			class = network.ClassifyEgress(srcPod, flow.DstIP, podByIP, nodeByIP)
-			costUSD = b.egressCostUSD(flow.TxBytes, class)
 			if dstKind != "pod" && dstKind != "node" && dstKind != "service" {
 				isEgress = true
 			}
@@ -207,7 +199,6 @@ func (b *Builder) buildNetworkConnections(flows []network.Flow, podByIP, nodeByI
 			BytesSent:     flow.TxBytes,
 			BytesReceived: flow.RxBytes,
 			EgressClass:   class,
-			EgressCostUSD: costUSD,
 			DstKind:       dstKind,
 			ServiceMatch:  serviceMatch,
 			IsEgress:      isEgress,
@@ -241,6 +232,7 @@ func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string
 			AllocatableMemBytes: clampUint64(node.Status.Allocatable.Memory().Value()),
 			RequestedCPUMilli:   clampUint64(req.cpuMilli),
 			RequestedMemBytes:   clampUint64(req.memoryBytes),
+			ThrottlingNs:        current.ThrottledNs,
 		})
 	}
 	return metrics
@@ -455,20 +447,6 @@ func appendServiceMatches(list []ServiceRef, matches []serviceMatch) []ServiceRe
 		list = appendServiceRef(list, match.Ref)
 	}
 	return list
-}
-
-func (b *Builder) egressCostUSD(bytes uint64, class string) float64 {
-	if bytes == 0 {
-		return 0
-	}
-	price := b.networkPricing.DefaultEgressGiBPriceUSD
-	if specific, ok := b.networkPricing.EgressGiBPricesUSD[class]; ok {
-		price = specific
-	}
-	if price == 0 {
-		return 0
-	}
-	return (float64(bytes) / (1024.0 * 1024 * 1024)) * price
 }
 
 func skipPod(pod *corev1.Pod) bool {

@@ -41,25 +41,12 @@ func TestMapPodCgroups_WithChildren(t *testing.T) {
 		},
 	}
 
-	inodeToPod, podToPath, err := mapPodCgroups(root, []*corev1.Pod{pod})
+	podToPath, err := mapPodCgroups(root, []*corev1.Pod{pod})
 	if err != nil {
 		t.Fatalf("mapPodCgroups: %v", err)
 	}
 
-	// We expect 2 inodes mapped (Root + Container1)
-	// Actually typical k8s has pause container + app container(s).
-	// Here we just created 2 directories.
-	if len(inodeToPod) != 2 {
-		t.Errorf("expected 2 cgroup mappings (root+child), got %d", len(inodeToPod))
-	}
-
 	expectedKey := "payments/api-0"
-	for inode, key := range inodeToPod {
-		if key != expectedKey {
-			t.Errorf("inode %d mapped to %s, expected %s", inode, key, expectedKey)
-		}
-	}
-
 	// Verify Path mapping (should point to Root)
 	if path, ok := podToPath[expectedKey]; !ok {
 		t.Errorf("expected pod path mapping for %s", expectedKey)

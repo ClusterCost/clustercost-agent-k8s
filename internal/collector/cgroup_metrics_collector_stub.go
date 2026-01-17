@@ -13,12 +13,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-func newEBPFMetricsCollector(cfg config.MetricsConfig, logger *slog.Logger) PodMetricsCollector {
+func newCgroupMetricsCollector(cfg config.MetricsConfig, logger *slog.Logger) PodMetricsCollector {
 	return &unsupportedMetricsCollector{}
 }
 
 type unsupportedMetricsCollector struct{}
 
 func (u *unsupportedMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*corev1.Pod) (map[string]kube.PodUsage, error) {
-	return nil, fmt.Errorf("eBPF metrics collector is only supported on linux")
+	return nil, fmt.Errorf("cgroup metrics collector is only supported on linux")
 }

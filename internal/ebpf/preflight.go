@@ -45,11 +45,6 @@ func Preflight(cfg config.Config, logger *slog.Logger) PreflightReport {
 		})
 	}
 
-	if cfg.Metrics.Enabled {
-		checkBTF(&report)
-		checkPathReadable(&report, "metrics cgroup", cfg.Metrics.CgroupPath, "/sys/fs/cgroup")
-		checkPinDirWritable(&report, "metrics map", cfg.Metrics.BPFMapPath)
-	}
 	if cfg.Network.Enabled {
 		checkBTF(&report)
 		checkPathReadable(&report, "network cgroup", cfg.Network.CgroupPath, "/sys/fs/cgroup")

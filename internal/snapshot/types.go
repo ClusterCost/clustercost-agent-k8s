@@ -31,11 +31,9 @@ type PodMetric struct {
 }
 
 type CpuMetrics struct {
-	UsageUser         uint64 `json:"usageUserNs"`
-	UsageKernel       uint64 `json:"usageKernelNs"`
-	Throttling        uint64 `json:"throttlingNs"`
 	RequestMillicores uint64 `json:"requestMillicores"`
 	LimitMillicores   uint64 `json:"limitMillicores"`
+	UsageMillicores   uint64 `json:"usageMillicores"`
 }
 
 type MemoryMetrics struct {
@@ -60,7 +58,6 @@ type NetworkConnection struct {
 	BytesSent     uint64          `json:"bytesSent"`
 	BytesReceived uint64          `json:"bytesReceived"`
 	EgressClass   string          `json:"egressClass"`
-	EgressCostUSD float64         `json:"egressCostUsd"`
 	DstKind       string          `json:"dstKind"`
 	ServiceMatch  string          `json:"serviceMatch"`
 	IsEgress      bool            `json:"isEgress"`
@@ -86,6 +83,7 @@ type NodeMetric struct {
 	AllocatableMemBytes uint64 `json:"allocatableMemoryBytes"`
 	RequestedCPUMilli   uint64 `json:"requestedCpuMillicores"`
 	RequestedMemBytes   uint64 `json:"requestedMemoryBytes"`
+	ThrottlingNs        uint64 `json:"throttlingNs"`
 }
 
 type ServiceRef struct {

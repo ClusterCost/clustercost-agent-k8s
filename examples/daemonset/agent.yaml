@@ -83,71 +83,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
-            - name: CLUSTERCOST_CLUSTER_NAME
+            - name: CLUSTER_NAME
               value: "my-cluster"
-            - name: CLUSTERCOST_PROVIDER
-              value: "aws"
-            - name: CLUSTERCOST_REGION
-              value: "us-east-1"
-            - name: CLUSTERCOST_SCRAPE_INTERVAL
-              value: "30s"
-            - name: CLUSTERCOST_LISTEN_ADDR
-              value: ":8080"
-            - name: CLUSTERCOST_LOG_LEVEL
-              value: "info"
-            - name: CLUSTERCOST_EBPF_METRICS_ENABLED
-              value: "true"
-            - name: CLUSTERCOST_NETWORK_ENABLED
-              value: "true"
-            - name: CLUSTERCOST_NETWORK_DETAILED
-              value: "true"
-            - name: CLUSTERCOST_NETWORK_DNS_CAPTURE
-              value: "true"
-            - name: CLUSTERCOST_NETWORK_DNS_SAMPLE_RATE
-              value: "100"
-            - name: CLUSTERCOST_EBPF_METRICS_MAP_PATH
-              value: "/sys/fs/bpf/clustercost/metrics"
-            - name: CLUSTERCOST_EBPF_MAP_PATH
-              value: "/sys/fs/bpf/clustercost/flows"
-            - name: CLUSTERCOST_EBPF_METRICS_OBJECT
-              value: "/opt/clustercost/bpf/metrics.bpf.o"
-            - name: CLUSTERCOST_EBPF_NET_OBJECT
-              value: "/opt/clustercost/bpf/flows.bpf.o"
-            - name: CLUSTERCOST_EBPF_METRICS_CGROUP_PATH
-              value: "/sys/fs/cgroup"
-            - name: CLUSTERCOST_EBPF_NET_CGROUP_PATH
-              value: "/sys/fs/cgroup"
-            - name: CLUSTERCOST_CGROUP_ROOT
-              value: "/sys/fs/cgroup"
-            - name: CLUSTERCOST_NETWORK_EGRESS_GIB_PRICE
-              value: "0.09"
-            - name: CLUSTERCOST_REMOTE_ENABLED
-              value: "true"
-            - name: CLUSTERCOST_REMOTE_ENDPOINT
-              value: "clustercost-dashboard.clustercost.svc.cluster.local:9091"
-            - name: CLUSTERCOST_REMOTE_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: clustercost-remote
-                  key: token
-            - name: CLUSTERCOST_REMOTE_TIMEOUT
-              value: "10s"
-            - name: CLUSTERCOST_REMOTE_QUEUE_DIR
-              value: "/var/lib/clustercost/queue"
-            - name: CLUSTERCOST_REMOTE_FLUSH_EVERY
-              value: "15s"
-            - name: CLUSTERCOST_REMOTE_MAX_BATCH
-              value: "200"
-            - name: CLUSTERCOST_REMOTE_MAX_RETRIES
-              value: "8"
-            - name: CLUSTERCOST_REMOTE_BACKOFF
-              value: "1s"
-            - name: CLUSTERCOST_REMOTE_MAX_BATCH_BYTES
-              value: "1048576"
-            - name: CLUSTERCOST_REMOTE_MEMORY_BUFFER
-              value: "5"
-            - name: CLUSTERCOST_REMOTE_GZIP
-              value: "true"
           volumeMounts:
             - name: bpf
               mountPath: /sys/fs/bpf

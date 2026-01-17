@@ -3,9 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
-	"clustercost-agent-k8s/internal/forwarder"
 	"clustercost-agent-k8s/internal/snapshot"
 )
 
@@ -33,54 +31,19 @@ func NewHandler(clusterType, clusterName, clusterRegion, version, agentID string
 
 // Register wires all API endpoints on the mux.
 func (h *Handler) Register(mux *http.ServeMux) {
-	mux.HandleFunc("/agent/v1/readyz", h.readyz)
-	mux.HandleFunc("/agent/v1/overview", h.overview)
 	mux.HandleFunc("/agent/v1/health", h.health)
-	mux.HandleFunc("/agent/v1/pods", h.pods)
-	mux.HandleFunc("/api/debug/report", h.debugReport)
-}
-
-func (h *Handler) overview(w http.ResponseWriter, r *http.Request) {
-	status := "initializing"
-	timestamp := time.Now().UTC()
-	if snap, ok := h.store.Latest(); ok {
-		status = "ok"
-		timestamp = snap.Timestamp.UTC()
-	}
-
-	payload := map[string]any{
-		"status":        status,
-		"clusterType":   h.clusterType,
-		"clusterName":   h.clusterName,
-		"clusterRegion": h.clusterRegion,
-		"version":       h.version,
-		"timestamp":     timestamp.Format(time.RFC3339Nano),
-	}
-	respondJSON(w, http.StatusOK, payload)
+	mux.HandleFunc("/agent/v1/readyz", h.readyz)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
-	if snap, ok := h.store.Latest(); ok {
-		payload := map[string]any{
-			"status":        "ok",
-			"clusterType":   h.clusterType,
-			"clusterName":   h.clusterName,
-			"clusterRegion": h.clusterRegion,
-			"version":       h.version,
-			"timestamp":     snap.Timestamp.UTC().Format(time.RFC3339Nano),
-		}
-		respondJSON(w, http.StatusOK, payload)
-		return
-	}
-	payload := map[string]any{
-		"status":        "initializing",
+	respondJSON(w, http.StatusOK, map[string]string{
+		"status":        "ok",
+		"version":       h.version,
 		"clusterType":   h.clusterType,
 		"clusterName":   h.clusterName,
 		"clusterRegion": h.clusterRegion,
-		"version":       h.version,
-		"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	respondJSON(w, http.StatusOK, payload)
+		"agentId":       h.agentID,
+	})
 }
 
 func (h *Handler) readyz(w http.ResponseWriter, r *http.Request) {
@@ -89,38 +52,6 @@ func (h *Handler) readyz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-}
-
-func (h *Handler) pods(w http.ResponseWriter, r *http.Request) {
-	if snap, ok := h.store.Latest(); ok {
-		payload := map[string]any{
-			"items":     snap.Pods,
-			"timestamp": snap.Timestamp.UTC().Format(time.RFC3339Nano),
-		}
-		respondJSON(w, http.StatusOK, payload)
-		return
-	}
-	respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-}
-
-func (h *Handler) debugReport(w http.ResponseWriter, r *http.Request) {
-	snap, ok := h.store.Latest()
-	if !ok {
-		respondError(w, http.StatusServiceUnavailable, "snapshot not ready")
-		return
-	}
-
-	report := forwarder.AgentReport{
-		ClusterID:   h.clusterName, // Previously snap.Resources.ClusterID but we lost that.
-		ClusterName: h.clusterName,
-		NodeName:    "debug-manual-pull",
-		AgentID:     h.agentID,
-		Version:     h.version,
-		Timestamp:   time.Now().UTC(),
-		Snapshot:    snap,
-	}
-
-	respondJSON(w, http.StatusOK, report)
 }
 
 func respondJSON(w http.ResponseWriter, status int, payload any) {

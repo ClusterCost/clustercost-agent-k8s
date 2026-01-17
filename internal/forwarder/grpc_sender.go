@@ -99,11 +99,9 @@ func (s *GRPCSender) podMetricToProto(p snapshot.PodMetric) *agentv1.PodMetric {
 		Namespace:   p.Namespace,
 		PodName:     p.PodName,
 		Cpu: &agentv1.CpuMetrics{
-			UsageUserNs:       p.Cpu.UsageUser,
-			UsageKernelNs:     p.Cpu.UsageKernel,
-			ThrottlingNs:      p.Cpu.Throttling,
 			RequestMillicores: p.Cpu.RequestMillicores,
 			LimitMillicores:   p.Cpu.LimitMillicores,
+			UsageMillicores:   p.Cpu.UsageMillicores,
 		},
 		Memory: &agentv1.MemoryMetrics{
 			RssBytes:        p.Memory.RSS,
@@ -136,7 +134,6 @@ func (s *GRPCSender) connectionToProto(c snapshot.NetworkConnection) *agentv1.Ne
 		BytesSent:     c.BytesSent,
 		BytesReceived: c.BytesReceived,
 		EgressClass:   c.EgressClass,
-		EgressCostUsd: c.EgressCostUSD,
 		DstKind:       c.DstKind,
 		ServiceMatch:  c.ServiceMatch,
 		IsEgress:      c.IsEgress,
@@ -172,5 +169,6 @@ func (s *GRPCSender) nodeMetricToProto(n snapshot.NodeMetric) *agentv1.NodeMetri
 		AllocatableMemoryBytes:   n.AllocatableMemBytes,
 		RequestedCpuMillicores:   n.RequestedCPUMilli,
 		RequestedMemoryBytes:     n.RequestedMemBytes,
+		ThrottlingNs:             n.ThrottlingNs,
 	}
 }

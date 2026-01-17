@@ -13,16 +13,6 @@ import (
 	"github.com/cilium/ebpf/rlimit"
 )
 
-// GetMetricsMap returns the metrics map if loaded.
-func (m *Manager) GetMetricsMap() *ebpf.Map {
-	for _, obj := range m.objs {
-		if mp := obj.Maps["clustercost_metrics"]; mp != nil {
-			return mp
-		}
-	}
-	return nil
-}
-
 // Manager keeps eBPF programs and links alive for the agent.
 type Manager struct {
 	logger *slog.Logger
@@ -37,12 +27,6 @@ func Start(cfg config.Config, logger *slog.Logger) (*Manager, error) {
 		return nil, fmt.Errorf("raise memlock rlimit: %w", err)
 	}
 
-	if cfg.Metrics.Enabled {
-		if err := mgr.loadMetrics(cfg.Metrics); err != nil {
-			mgr.Close()
-			return nil, err
-		}
-	}
 	if cfg.Network.Enabled {
 		if err := mgr.loadNetwork(cfg.Network); err != nil {
 			mgr.Close()
@@ -61,79 +45,6 @@ func (m *Manager) Close() {
 	for _, obj := range m.objs {
 		obj.Close()
 	}
-}
-
-func (m *Manager) loadMetrics(cfg config.MetricsConfig) error {
-	spec, err := ebpf.LoadCollectionSpec(cfg.ObjectPath)
-	if err != nil {
-		return fmt.Errorf("load metrics eBPF object: %w", err)
-	}
-	collection, err := ebpf.NewCollection(spec)
-	if err != nil {
-		return fmt.Errorf("create metrics collection: %w", err)
-	}
-	m.objs = append(m.objs, collection)
-	if cfg.BPFMapPath != "" {
-		if mp := collection.Maps["clustercost_metrics"]; mp != nil {
-			if err := os.MkdirAll(filepath.Dir(cfg.BPFMapPath), 0o750); err != nil {
-				return fmt.Errorf("create metrics map dir: %w", err)
-			}
-			if _, err := os.Stat(cfg.BPFMapPath); err == nil {
-				_ = os.Remove(cfg.BPFMapPath)
-			}
-			if err := mp.Pin(cfg.BPFMapPath); err != nil {
-				return fmt.Errorf("pin metrics map: %w", err)
-			}
-		}
-	}
-
-	cgroupPath := cfg.CgroupPath
-	if cgroupPath == "" {
-		cgroupPath = "/sys/fs/cgroup"
-	}
-	if _, err := os.Stat(cgroupPath); err != nil {
-		return fmt.Errorf("metrics cgroup path not found: %w", err)
-	}
-
-	schedProg := collection.Programs["handle_sched_switch"]
-	if schedProg == nil {
-		m.logger.Warn("missing metrics program handle_sched_switch; cpu metrics will be unavailable")
-	} else {
-		linkSched, err := link.AttachTracing(link.TracingOptions{Program: schedProg})
-		if err != nil {
-			m.logger.Warn("attach sched_switch tracing failed; cpu metrics will be unavailable",
-				slog.String("error", err.Error()))
-		} else {
-			m.links = append(m.links, linkSched)
-		}
-	}
-
-	allocProg := collection.Programs["handle_mm_page_alloc"]
-	if allocProg != nil {
-		linkAlloc, err := link.Tracepoint("mm", "mm_page_alloc", allocProg, nil)
-		if err != nil {
-			m.logger.Warn("optional tracepoint not found; memory metrics may be incomplete",
-				slog.String("tracepoint", "mm_page_alloc"),
-				slog.String("error", err.Error()))
-		} else {
-			m.links = append(m.links, linkAlloc)
-		}
-	}
-
-	freeProg := collection.Programs["handle_mm_page_free"]
-	if freeProg != nil {
-		linkFree, err := link.Tracepoint("mm", "mm_page_free", freeProg, nil)
-		if err != nil {
-			m.logger.Warn("optional tracepoint not found; memory metrics may be incomplete",
-				slog.String("tracepoint", "mm_page_free"),
-				slog.String("error", err.Error()))
-		} else {
-			m.links = append(m.links, linkFree)
-		}
-	}
-
-	m.logger.Info("loaded eBPF metrics programs", slog.String("object", cfg.ObjectPath))
-	return nil
 }
 
 func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {

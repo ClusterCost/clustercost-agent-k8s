@@ -53,16 +53,12 @@ message PodMetric {
 }
 
 message CpuMetrics {
-  // Total nanoseconds in user space
-  uint64 usage_user_ns = 1;
-  // Total nanoseconds in kernel space
-  uint64 usage_kernel_ns = 2;
-  // Total run_delay (throttling) in nanoseconds
-  uint64 throttling_ns = 3;
   // K8s Requests (mCPU)
   uint64 request_millicores = 4;
   // K8s Limits (mCPU)
   uint64 limit_millicores = 5;
+  // Usage (mCPU)
+  uint64 usage_millicores = 6;
 }
 
 message MemoryMetrics {
@@ -94,7 +90,6 @@ message NetworkConnection {
   uint64 bytes_sent = 4;
   uint64 bytes_received = 5;
   string egress_class = 6;
-  double egress_cost_usd = 7;
   string dst_kind = 8;
   string service_match = 9;
   bool is_egress = 10;
@@ -110,6 +105,8 @@ message NodeMetric {
   uint64 allocatable_memory_bytes = 7;
   uint64 requested_cpu_millicores = 8;
   uint64 requested_memory_bytes = 9;
+  // Total throttled CPU time from cgroup cpu.stat (ns).
+  uint64 throttling_ns = 10;
 }
 
 message NetworkEndpoint {

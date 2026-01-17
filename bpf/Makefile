@@ -19,10 +19,7 @@ $(VMLINUX_H):
 flows.bpf.o: flows.bpf.c $(VMLINUX_H)
 	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) -c $< -o $@
 
-metrics.bpf.o: metrics.bpf.c $(VMLINUX_H)
-	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) -c $< -o $@
-
-all: flows.bpf.o metrics.bpf.o
+all: flows.bpf.o
 
 clean:
 	rm -f *.bpf.o vmlinux.h

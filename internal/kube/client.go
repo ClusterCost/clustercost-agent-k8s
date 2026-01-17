@@ -8,13 +8,11 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-// Client bundles the kubernetes and metrics API clients.
+// Client bundles the kubernetes API client.
 type Client struct {
 	Kubernetes  kubernetes.Interface
-	Metrics     metrics.Interface
 	RestConfig  *rest.Config
 	ClusterName string
 }
@@ -38,10 +36,5 @@ func NewClient(clusterName, kubeconfigPath string) (*Client, error) {
 		return nil, fmt.Errorf("create kubernetes client: %w", err)
 	}
 
-	metricsClient, err := metrics.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("create metrics client: %w", err)
-	}
-
-	return &Client{Kubernetes: kubeClient, Metrics: metricsClient, RestConfig: config, ClusterName: clusterName}, nil
+	return &Client{Kubernetes: kubeClient, RestConfig: config, ClusterName: clusterName}, nil
 }
