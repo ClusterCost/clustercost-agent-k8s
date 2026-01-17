@@ -59,13 +59,17 @@ func TestDNSCacheEvictsWhenFull(t *testing.T) {
 
 func encodeDNSEvent(ip netip.Addr, name string, ttl uint32) []byte {
 	var event dnsEvent
-	if len(name) > dnsMaxNameBytes {
-		name = name[:dnsMaxNameBytes]
-	}
-	event.NameLen = uint8(len(name))
 	event.TTL = ttl
 
-	copy(event.Name[:], []byte(name))
+	raw := encodeQName(name)
+	if len(raw) == 0 {
+		return nil
+	}
+	if len(raw) > dnsMaxNameBytes {
+		raw = raw[:dnsMaxNameBytes]
+	}
+	event.NameLen = uint8(len(raw))
+	copy(event.Name[:], raw)
 	if ip.Is6() {
 		event.Family = dnsFamilyIPv6
 		addr := ip.As16()
@@ -80,4 +84,32 @@ func encodeDNSEvent(ip netip.Addr, name string, ttl uint32) []byte {
 	buf := make([]byte, size)
 	copy(buf, (*[1 << 20]byte)(unsafe.Pointer(&event))[:size])
 	return buf
+}
+
+func encodeQName(name string) []byte {
+	if name == "" {
+		return nil
+	}
+	out := make([]byte, 0, dnsMaxNameBytes)
+	for _, part := range splitDNSName(name) {
+		if len(part) == 0 || len(part) > 63 {
+			return nil
+		}
+		out = append(out, byte(len(part)))
+		out = append(out, []byte(part)...)
+	}
+	out = append(out, 0)
+	return out
+}
+
+func splitDNSName(name string) []string {
+	parts := []string{}
+	start := 0
+	for i := 0; i <= len(name); i++ {
+		if i == len(name) || name[i] == '.' {
+			parts = append(parts, name[start:i])
+			start = i + 1
+		}
+	}
+	return parts
 }

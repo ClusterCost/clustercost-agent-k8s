@@ -133,14 +133,13 @@ func (c *DNSCache) ingest(payload []byte) {
 	copy((*[dnsEventSize]byte)(unsafe.Pointer(&event))[:], payload)
 
 	nameLen := int(event.NameLen)
-	if nameLen <= 0 || nameLen > dnsMaxNameBytes {
+	if nameLen <= 0 || nameLen >= dnsMaxNameBytes {
 		return
 	}
-	name := string(event.Name[:nameLen])
-	if name == "" {
+	name, ok := decodeQName(event.Name[:nameLen])
+	if !ok || name == "" {
 		return
 	}
-
 	ip, ok := dnsEventIP(event)
 	if !ok {
 		return
@@ -184,4 +183,33 @@ func dnsEventIP(event dnsEvent) (netip.Addr, bool) {
 	default:
 		return netip.Addr{}, false
 	}
+}
+
+func decodeQName(raw []byte) (string, bool) {
+	if len(raw) == 0 {
+		return "", false
+	}
+	out := make([]byte, 0, len(raw))
+	for i := 0; i < len(raw); {
+		labelLen := int(raw[i])
+		if labelLen == 0 {
+			break
+		}
+		if labelLen&0xC0 != 0 {
+			return "", false
+		}
+		i++
+		if labelLen > 63 || i+labelLen > len(raw) {
+			return "", false
+		}
+		if len(out) > 0 {
+			out = append(out, '.')
+		}
+		out = append(out, raw[i:i+labelLen]...)
+		i += labelLen
+	}
+	if len(out) == 0 {
+		return "", false
+	}
+	return string(out), true
 }

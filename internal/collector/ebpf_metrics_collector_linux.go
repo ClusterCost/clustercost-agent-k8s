@@ -30,15 +30,13 @@ type ebpfMetricsCollector struct {
 	usageMap *ebpf.Map
 	last     map[uint64]metricStats
 
-	// Cache mapping from Pod Key (ns/name) -> Cgroup Info
-	cache    map[string]cgroupInfo
+	// Cache mapping from Inode -> Pod Key
+	inodeToPod map[uint64]string
+	// Cache mapping from Pod Key -> Cgroup Path (Root) for RSS
+	podToPath map[string]string
+
 	cacheAt  time.Time
 	cacheTTL time.Duration
-}
-
-type cgroupInfo struct {
-	Inode uint64
-	Path  string
 }
 
 type metricKey struct {
@@ -50,7 +48,7 @@ type metricStats struct {
 	CPUKernelNs     uint64
 	CPURunDelayNs   uint64
 	PageFaultsMajor uint64
-	MemoryRSSBytes  uint64 // Assuming BPF could have it, or we fill it manually
+	MemoryRSSBytes  uint64
 }
 
 // newEBPFMetricsCollector reads a pinned eBPF map of cgroup stats.
@@ -68,7 +66,9 @@ func newEBPFMetricsCollector(cfg config.MetricsConfig, logger *slog.Logger) PodM
 		cgroupRoot: cgroupRoot,
 		logger:     logger,
 		last:       map[uint64]metricStats{},
-		cache:      map[string]cgroupInfo{},
+		// Initialize empty maps
+		inodeToPod: map[uint64]string{},
+		podToPath:  map[string]string{},
 		cacheTTL:   30 * time.Second,
 	}
 }
@@ -81,57 +81,33 @@ func (c *ebpfMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*co
 		return nil, err
 	}
 
-	podCgroups, err := c.mapPodCgroupsCached(pods)
-	if err != nil {
+	if err := c.refreshCgroupCache(pods); err != nil {
 		return nil, err
 	}
 
-	// Reverse lookup: Inode -> Pod Key
-	inodeToPod := make(map[uint64]string, len(podCgroups))
-	for key, info := range podCgroups {
-		inodeToPod[info.Inode] = key
-	}
-
 	result := make(map[string]kube.PodUsage, len(pods))
-
-	// Pre-fill result map with zero usage so we include all running pods?
-	// Or just those we find stats for.
 
 	// Iterate map to get aggregated CPU/Fault stats
 	iter := c.usageMap.Iterate()
 	var key metricKey
 	var stats metricStats
+
+	// We simply accumulate counters for all cgroups belonging to a pod
 	for iter.Next(&key, &stats) {
-		podKey, ok := inodeToPod[key.CgroupID]
+		podKey, ok := c.inodeToPod[key.CgroupID]
 		if !ok {
 			continue
 		}
 
-		// We track last but don't strictly usage it for diff if sending counters
 		c.last[key.CgroupID] = stats
 
-		usage := result[podKey]
+		usage := result[podKey] // Zero value if new
 
-		// CPU & Faults are counters (deltas accumulated).
-		// We want total since start? Or delta since last report?
-		// The Agent buffers for 10s. The aggregator likely expects "Usage during window" or "Total usage counter"?
-		// Spec: "CPU Usage: Total nanoseconds/cycles...". Usually implies counter.
-		// "Throughput: Total bytes_sent".
-		// But in `builder.go` we just assign.
-		// If we assign counters, the aggregator can compute rate.
-		// `Sched_stat_runtime` is cumulative. `utime` is cumulative.
-		// So we can send Cumulative values.
-		// BPF map stores Cumulative (it adds deltas to a counter).
-		// So `stats.CPUUserNs` is cumulative from map creation/agent start.
-		// Actually BPF map persists?
-		// "Stateless... buffers events for 10s".
-		// Agent just reports what's in the map.
-		// Aggregator calc rates.
-
-		usage.CPUUsageUserNs = stats.CPUUserNs
-		usage.CPUUsageKernelNs = stats.CPUKernelNs
-		usage.CPUThrottlingNs = stats.CPURunDelayNs
-		usage.MemoryPageFaults = stats.PageFaultsMajor
+		// Aggregate (sum) counters from all containers in the pod
+		usage.CPUUsageUserNs += stats.CPUUserNs
+		usage.CPUUsageKernelNs += stats.CPUKernelNs
+		usage.CPUThrottlingNs += stats.CPURunDelayNs
+		usage.MemoryPageFaults += stats.PageFaultsMajor
 
 		result[podKey] = usage
 	}
@@ -140,16 +116,17 @@ func (c *ebpfMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*co
 		return result, fmt.Errorf("iterate eBPF metrics map: %w", err)
 	}
 
-	// Fill RSS from cgroup files (Userspace)
-	for podKey, info := range podCgroups {
+	// Fill RSS from cgroup files (Userspace) - only from the Root Pod Cgroup
+	for podKey, path := range c.podToPath {
 		usage := result[podKey]
-		rss, err := readCgroupMemory(info.Path)
+		// Determine if "path" is sufficient or if we need to recurse for RSS?
+		// memory.current in the Pod Cgroup includes all children (Swap/Anon/File).
+		// So reading root is correct for total Pod RSS/Memory.
+		rss, err := readCgroupMemory(path)
 		if err == nil {
 			usage.MemoryRSS = rss
 		}
 
-		// If we had no BPF entry (idle pod?), usage is 0 counters.
-		// But we have RSS.
 		result[podKey] = usage
 	}
 
@@ -168,73 +145,101 @@ func (c *ebpfMetricsCollector) ensureMap() error {
 	return nil
 }
 
-func mapPodCgroups(cgroupRoot string, pods []*corev1.Pod) (map[string]cgroupInfo, error) {
+func (c *ebpfMetricsCollector) refreshCgroupCache(pods []*corev1.Pod) error {
+	now := time.Now()
+	// Simple TTL cache
+	if now.Sub(c.cacheAt) < c.cacheTTL && len(c.inodeToPod) > 0 {
+		return nil
+	}
+
+	inodeToPod, podToPath, err := mapPodCgroups(c.cgroupRoot, pods)
+	if err != nil {
+		return err
+	}
+
+	c.inodeToPod = inodeToPod
+	c.podToPath = podToPath
+	c.cacheAt = now
+	return nil
+}
+
+// mapPodCgroups walks the cgroup hierarchy and identifies:
+// 1. All cgroups (inodes) that belong to a Pod (including children) -> inodeToPod
+// 2. The specific Root cgroup path for the Pod (for RSS reading) -> podToPath
+func mapPodCgroups(cgroupRoot string, pods []*corev1.Pod) (map[uint64]string, map[string]string, error) {
+	// Prepare token matching
 	uidTokens := make(map[string]string, len(pods))
 	for _, pod := range pods {
 		if pod == nil || pod.UID == "" {
 			continue
 		}
 		uid := string(pod.UID)
-		// Match typical k8s cgroup naming patterns
-		token := "pod" + strings.ReplaceAll(uid, "-", "_")
+		// Match various k8s cgroup naming patterns containing the UID
+		// e.g. "pod<UID>", "pod<UID>_<etc>"
+		token := strings.ReplaceAll(uid, "-", "_")
 		uidTokens[token] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-		uidTokens["pod"+uid] = fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
 	}
 
-	result := map[string]cgroupInfo{}
+	inodeToPod := make(map[uint64]string)
+	podToPath := make(map[string]string)
+
 	if len(uidTokens) == 0 {
-		return result, nil
+		return inodeToPod, podToPath, nil
 	}
 
 	err := filepath.WalkDir(cgroupRoot, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// Ignore access errors in cgroup walk, typical permissions
+			return nil
 		}
 		if !entry.IsDir() {
 			return nil
 		}
-		base := entry.Name()
+
+		// Check if this directory corresponds to a known Pod
+		// We check if the path contains the UID token.
+		// NOTE: This assumes unique UIDs in paths.
+		// Ideally we match the *Directory Name* for the Root, and path for children.
+		//
+		// Root cgroup usually looks like: .../kubepods/.../pod<UID-ish>/
+		// Child cgroup: .../kubepods/.../pod<UID-ish>/<container-id>
+		//
+		// We want:
+		// - If directory name contains "pod<UID>", it's the Root.
+		// - If path contains "pod<UID>", it belongs to the Pod (Root or Child).
+
+		dirName := entry.Name()
+		// Optimization: Check if we are inside a relevant subtree?
+		// For now, simpler check.
+
 		for token, podKey := range uidTokens {
-			if !strings.Contains(base, token) {
-				continue
-			}
-			if _, ok := result[podKey]; ok {
-				continue
-			}
-			if inode, ok := cgroupInode(path); ok {
-				result[podKey] = cgroupInfo{Inode: inode, Path: path}
+			if strings.Contains(path, token) {
+				// This cgroup belongs to the pod (either root or child)
+				// Get Inode
+				inode, ok := cgroupInode(path)
+				if ok {
+					inodeToPod[inode] = podKey
+				}
+
+				// Check if this is the Root of the pod
+				// Heuristic: The directory name itself contains "pod" + part of UID,
+				// or it matches the pattern commonly used for Pod roots.
+				// K8s usually names the Pod Cgroup directory "pod<UID-with-underscores>" or similar.
+				// Containers are children named by ContainerID.
+				if strings.Contains(dirName, token) || strings.Contains(dirName, "pod"+token) {
+					// This is likely the root
+					// Store it for RSS. If multiple match, last one wins (usually only one root).
+					podToPath[podKey] = path
+				}
 			}
 		}
 		return nil
 	})
-	if err != nil {
-		return result, err
-	}
-	return result, nil
-}
 
-func (c *ebpfMetricsCollector) mapPodCgroupsCached(pods []*corev1.Pod) (map[string]cgroupInfo, error) {
-	now := time.Now()
-	if now.Sub(c.cacheAt) >= c.cacheTTL {
-		cache, err := mapPodCgroups(c.cgroupRoot, pods)
-		if err != nil {
-			return cache, err
-		}
-		c.cache = cache
-		c.cacheAt = now
-		return cache, nil
+	if err != nil {
+		return nil, nil, err
 	}
-	result := make(map[string]cgroupInfo, len(pods))
-	for _, pod := range pods {
-		if pod == nil || pod.UID == "" {
-			continue
-		}
-		key := fmt.Sprintf("%s/%s", pod.Namespace, pod.Name)
-		if info, ok := c.cache[key]; ok {
-			result[key] = info
-		}
-	}
-	return result, nil
+	return inodeToPod, podToPath, nil
 }
 
 func cgroupInode(path string) (uint64, bool) {
@@ -251,7 +256,6 @@ func cgroupInode(path string) (uint64, bool) {
 
 func readCgroupMemory(cgroupPath string) (uint64, error) {
 	// Try cgroup v2 memory.current
-	// Or memory.stat for anon + file
 	data, err := os.ReadFile(filepath.Join(cgroupPath, "memory.current"))
 	if err != nil {
 		return 0, err

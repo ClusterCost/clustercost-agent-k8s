@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 
+	"clustercost-agent-k8s/internal/config"
 	"clustercost-agent-k8s/internal/kube"
 
 	corev1 "k8s.io/api/core/v1"
@@ -16,8 +17,11 @@ type NodeMetricsCollector interface {
 	CollectNodeMetrics(ctx context.Context, nodes []*corev1.Node) (map[string]kube.NodeUsage, error)
 }
 
-// NewNodeMetricsCollector returns a metrics API-backed node metrics collector.
-func NewNodeMetricsCollector(client metricsclient.Interface, logger *slog.Logger) NodeMetricsCollector {
+// NewNodeMetricsCollector returns an eBPF-backed collector when enabled, otherwise a metrics API-backed collector.
+func NewNodeMetricsCollector(cfg config.MetricsConfig, nodeName string, client metricsclient.Interface, logger *slog.Logger) NodeMetricsCollector {
+	if cfg.Enabled {
+		return newEBPFNodeMetricsCollector(cfg, nodeName, logger)
+	}
 	if client == nil {
 		return &noopNodeMetricsCollector{}
 	}

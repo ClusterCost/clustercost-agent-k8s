@@ -12,13 +12,25 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-func TestMapPodCgroupIDs(t *testing.T) {
+func TestMapPodCgroups_WithChildren(t *testing.T) {
 	root := t.TempDir()
 	uid := "11111111-2222-3333-4444-555555555555"
-	uidToken := "pod" + "11111111_2222_3333_4444_555555555555"
-	path := filepath.Join(root, "kubepods.slice", "kubepods-burstable.slice", "kubepods-burstable-"+uidToken+".slice")
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+	uidToken := "11111111_2222_3333_4444_555555555555"
+
+	// Mock Hierarchy:
+	// .../pod<UID>/ (Root)
+	// .../pod<UID>/container1 (Child)
+	// .../pod<UID>/container2 (Child)
+
+	podDirName := "pod" + uidToken
+	rootCgroupPath := filepath.Join(root, "kubepods.slice", "kubepods-burstable.slice", "kubepods-burstable-"+podDirName+".slice")
+	if err := os.MkdirAll(rootCgroupPath, 0o755); err != nil {
+		t.Fatalf("mkdir root: %v", err)
+	}
+
+	container1Path := filepath.Join(rootCgroupPath, "docker-container1.scope")
+	if err := os.MkdirAll(container1Path, 0o755); err != nil {
+		t.Fatalf("mkdir container1: %v", err)
 	}
 
 	pod := &corev1.Pod{
@@ -29,14 +41,29 @@ func TestMapPodCgroupIDs(t *testing.T) {
 		},
 	}
 
-	cgroups, err := mapPodCgroupIDs(root, []*corev1.Pod{pod})
+	inodeToPod, podToPath, err := mapPodCgroups(root, []*corev1.Pod{pod})
 	if err != nil {
-		t.Fatalf("mapPodCgroupIDs: %v", err)
+		t.Fatalf("mapPodCgroups: %v", err)
 	}
-	if len(cgroups) != 1 {
-		t.Fatalf("expected 1 cgroup mapping, got %d", len(cgroups))
+
+	// We expect 2 inodes mapped (Root + Container1)
+	// Actually typical k8s has pause container + app container(s).
+	// Here we just created 2 directories.
+	if len(inodeToPod) != 2 {
+		t.Errorf("expected 2 cgroup mappings (root+child), got %d", len(inodeToPod))
 	}
-	if cgroups["payments/api-0"] == 0 {
-		t.Fatalf("expected non-zero inode")
+
+	expectedKey := "payments/api-0"
+	for inode, key := range inodeToPod {
+		if key != expectedKey {
+			t.Errorf("inode %d mapped to %s, expected %s", inode, key, expectedKey)
+		}
+	}
+
+	// Verify Path mapping (should point to Root)
+	if path, ok := podToPath[expectedKey]; !ok {
+		t.Errorf("expected pod path mapping for %s", expectedKey)
+	} else if path != rootCgroupPath {
+		t.Errorf("expected pod path %s, got %s", rootCgroupPath, path)
 	}
 }

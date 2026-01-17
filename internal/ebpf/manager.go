@@ -99,10 +99,9 @@ func (m *Manager) loadMetrics(cfg config.MetricsConfig) error {
 	if schedProg == nil {
 		m.logger.Warn("missing metrics program handle_sched_switch; cpu metrics will be unavailable")
 	} else {
-		linkSched, err := link.Tracepoint("sched", "sched_switch", schedProg, nil)
+		linkSched, err := link.AttachTracing(link.TracingOptions{Program: schedProg})
 		if err != nil {
-			m.logger.Warn("optional tracepoint not found; cpu metrics will be unavailable",
-				slog.String("tracepoint", "sched_switch"),
+			m.logger.Warn("attach sched_switch tracing failed; cpu metrics will be unavailable",
 				slog.String("error", err.Error()))
 		} else {
 			m.links = append(m.links, linkSched)

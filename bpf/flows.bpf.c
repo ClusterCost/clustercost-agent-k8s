@@ -82,32 +82,22 @@ static __always_inline void fill_ipv6(__u8 dst[16], const __u8 *src) {
 	}
 }
 
-static __always_inline int read_qname(struct __sk_buff *skb, __u32 *cursor, char *out, __u8 *out_len) {
+static __always_inline int read_qname_raw(struct __sk_buff *skb, __u32 *cursor, char *out, __u8 *out_len) {
 	#pragma unroll
-	for (int i = 0; i < DNS_MAX_LABELS; i++) {
-		__u8 len = 0;
-		if (bpf_skb_load_bytes(skb, *cursor, &len, sizeof(len)) < 0) {
+	for (int i = 0; i < DNS_MAX_NAME; i++) {
+		__u8 b = 0;
+		if (bpf_skb_load_bytes(skb, *cursor + i, &b, sizeof(b)) < 0) {
 			return 0;
 		}
-		if (len == 0) {
-			*cursor += 1;
+		if (b & 0xC0) {
+			return 0;
+		}
+		out[i] = b;
+		if (b == 0) {
+			*out_len = i + 1;
+			*cursor += i + 1;
 			return 1;
 		}
-		if (len & 0xC0) {
-			return 0;
-		}
-		*cursor += 1;
-		if (*out_len > 0 && *out_len < DNS_MAX_NAME - 1) {
-			out[(*out_len)++] = '.';
-		}
-		if (*out_len + len >= DNS_MAX_NAME) {
-			return 0;
-		}
-		if (bpf_skb_load_bytes(skb, *cursor, &out[*out_len], len) < 0) {
-			return 0;
-		}
-		*out_len += len;
-		*cursor += len;
 	}
 	return 0;
 }
@@ -153,37 +143,34 @@ static __always_inline void maybe_emit_dns(struct __sk_buff *skb, __u32 dns_offs
 		return;
 	}
 	__u32 cursor = dns_offset + sizeof(hdr);
-	char name[DNS_MAX_NAME] = {};
+	struct dns_event *event = bpf_ringbuf_reserve(&clustercost_dns_events, sizeof(*event), 0);
+	if (!event) {
+		return;
+	}
 	__u8 name_len = 0;
-	if (!read_qname(skb, &cursor, name, &name_len)) {
+	if (!read_qname_raw(skb, &cursor, event->name, &name_len)) {
+		bpf_ringbuf_discard(event, 0);
 		return;
 	}
 	cursor += 4; // qtype + qclass
 	if (!skip_name(skb, &cursor)) {
+		bpf_ringbuf_discard(event, 0);
 		return;
 	}
 
 	struct dns_answer_fixed ans = {};
 	if (bpf_skb_load_bytes(skb, cursor, &ans, sizeof(ans)) < 0) {
+		bpf_ringbuf_discard(event, 0);
 		return;
 	}
 	cursor += sizeof(ans);
 	__u16 atype = bpf_ntohs(ans.type);
 	__u16 rdlen = bpf_ntohs(ans.rdlen);
 	__u32 ttl = bpf_ntohl(ans.ttl);
-
-	struct dns_event *event = bpf_ringbuf_reserve(&clustercost_dns_events, sizeof(*event), 0);
-	if (!event) {
-		return;
-	}
 	event->family = family;
 	event->name_len = name_len;
 	event->ttl = ttl;
 	__builtin_memset(event->addr, 0, sizeof(event->addr));
-	#pragma unroll
-	for (int i = 0; i < DNS_MAX_NAME; i++) {
-		event->name[i] = name[i];
-	}
 
 	if (atype == 1 && rdlen == 4) {
 		if (bpf_skb_load_bytes(skb, cursor, event->addr, 4) < 0) {

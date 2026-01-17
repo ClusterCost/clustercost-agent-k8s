@@ -160,7 +160,7 @@ func main() {
 		Enabled:    cfg.Network.Enabled,
 		BPFMapPath: cfg.Network.BPFMapPath,
 	}, logger)
-	nodeMetricsCollector := collector.NewNodeMetricsCollector(kubeClient.Metrics, logger)
+	nodeMetricsCollector := collector.NewNodeMetricsCollector(cfg.Metrics, nodeName, kubeClient.Metrics, logger)
 	dnsCache := collector.NewDNSCache(cfg.Network, logger)
 	if dnsCache != nil {
 		go dnsCache.Run(ctx)
