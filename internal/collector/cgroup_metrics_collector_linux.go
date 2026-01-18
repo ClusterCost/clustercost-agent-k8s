@@ -240,7 +240,7 @@ func readCPUStatV2(logger *slog.Logger, cgroupPath string) (cpuStat, error) {
 		return cpuStat{}, fmt.Errorf("cpu cgroup path is empty")
 	}
 	path := filepath.Join(cgroupPath, "cpu.stat")
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is discovered from cgroup hierarchy by the agent
 	if err != nil {
 		return cpuStat{}, err
 	}
@@ -315,7 +315,7 @@ type cpuTicks struct {
 }
 
 func readCPUAcctStat(path string) (cpuTicks, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return cpuTicks{}, err
 	}
@@ -344,7 +344,7 @@ func readCPUAcctStat(path string) (cpuTicks, error) {
 }
 
 func readThrottledTime(path string) (uint64, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return 0, err
 	}
@@ -367,7 +367,7 @@ func readThrottledTime(path string) (uint64, error) {
 }
 
 func readUintFromFile(path string) (uint64, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304
 	if err != nil {
 		return 0, err
 	}

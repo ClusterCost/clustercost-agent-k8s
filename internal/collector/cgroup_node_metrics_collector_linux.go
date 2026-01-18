@@ -178,5 +178,8 @@ func readNodeMemoryUsage(logger *slog.Logger, memPath string) int64 {
 	if err != nil {
 		return 0
 	}
+	if val > 9223372036854775807 { // MaxInt64
+		return 9223372036854775807
+	}
 	return int64(val)
 }
