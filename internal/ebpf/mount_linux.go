@@ -120,7 +120,7 @@ func verifyBPFPinning(basePath string) error {
 		// and "can't pin map" (likely FS permission/mount issue)
 		return fmt.Errorf("verifyBPFPinning: map creation failed (missing CAP_BPF/CAP_SYS_ADMIN?): %w", err)
 	}
-	defer m.Close()
+	defer func() { _ = m.Close() }()
 
 	// Pin directly to root to avoid mkdir permission issues in subdirs
 	pinName := fmt.Sprintf("clustercost-check-map-%d", os.Getpid())
