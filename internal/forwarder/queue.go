@@ -26,7 +26,7 @@ type Queue struct {
 	flushEvery    time.Duration
 	maxBatchBytes int64
 	memoryBuffer  int
-	sender        *Sender
+	sender        Forwarder
 	logger        *slog.Logger
 	mu            sync.Mutex
 	mem           []queuedReport
@@ -35,7 +35,7 @@ type Queue struct {
 }
 
 // NewQueue returns a configured Queue.
-func NewQueue(dir string, maxBatch, maxRetries int, backoff, flushEvery time.Duration, maxBatchBytes int64, memoryBuffer int, sender *Sender, logger *slog.Logger) *Queue {
+func NewQueue(dir string, maxBatch, maxRetries int, backoff, flushEvery time.Duration, maxBatchBytes int64, memoryBuffer int, sender Forwarder, logger *slog.Logger) *Queue {
 	if maxBatch <= 0 {
 		maxBatch = 50
 	}
@@ -203,12 +203,19 @@ func (q *Queue) flushOnce(ctx context.Context) {
 		return
 	}
 
-	if err := q.sender.SendBatch(ctx, reports); err != nil {
-		q.logger.Warn("remote batch send failed", slog.String("error", err.Error()))
-		q.bumpRetries(batchFiles)
-		return
+	// Send each report individually since sender doesn't support batching anymore
+	for _, report := range reports {
+		if err := q.sender.Send(ctx, report); err != nil {
+			q.logger.Warn("remote send failed", slog.String("error", err.Error()))
+			// If one fails, we consider the batch failed?
+			// Or we bump all of them?
+			// The original logic bumped the whole batch.
+			// Let's stick to bumping the whole batch for simplicity or robustness.
+			q.bumpRetries(batchFiles)
+			return
+		}
 	}
-
+	// All succeeded
 	for _, path := range batchFiles {
 		if err := os.Remove(path); err != nil {
 			q.logger.Warn("remove queue file failed", slog.String("error", err.Error()))
@@ -287,12 +294,18 @@ func (q *Queue) flushMemory(ctx context.Context) bool {
 	q.memBytes -= batchBytes
 	q.mu.Unlock()
 
-	reports := make([]AgentReport, 0, len(batch))
+	failed := false
 	for _, item := range batch {
-		reports = append(reports, item.report)
+		if err := q.sender.Send(ctx, item.report); err != nil {
+			q.logger.Warn("remote in-memory send failed", slog.String("error", err.Error()))
+			failed = true
+			break
+		}
 	}
-	if err := q.sender.SendBatch(ctx, reports); err != nil {
-		q.logger.Warn("remote in-memory send failed", slog.String("error", err.Error()))
+
+	if failed {
+		// Spill all to disk? Or just the failing ones?
+		// Logic: if memory send fails, spill to disk to retry later.
 		for _, item := range batch {
 			if err := q.writeToDisk(item.raw); err != nil {
 				q.logger.Warn("spill to disk failed", slog.String("error", err.Error()))

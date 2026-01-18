@@ -15,12 +15,12 @@ type PodMetricsCollector interface {
 	CollectPodMetrics(ctx context.Context, pods []*corev1.Pod) (map[string]kube.PodUsage, error)
 }
 
-// NewPodMetricsCollector returns an eBPF-backed metrics collector.
+// NewPodMetricsCollector returns a cgroup-backed metrics collector.
 func NewPodMetricsCollector(cfg config.MetricsConfig, logger *slog.Logger) PodMetricsCollector {
 	if !cfg.Enabled {
 		return &noopPodMetricsCollector{}
 	}
-	return newEBPFMetricsCollector(cfg, logger)
+	return newCgroupMetricsCollector(cfg, logger)
 }
 
 type noopPodMetricsCollector struct{}

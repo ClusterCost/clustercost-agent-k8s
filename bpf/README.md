@@ -6,7 +6,6 @@ Linux host with clang + bpftool installed:
   make
 
 The build emits:
-- metrics.bpf.o
 - flows.bpf.o
 
 Place the objects at `/opt/clustercost/bpf/` inside the container or set:

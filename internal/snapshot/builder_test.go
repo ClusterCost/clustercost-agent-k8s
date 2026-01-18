@@ -1,7 +1,6 @@
 package snapshot
 
 import (
-	"math"
 	"net/netip"
 	"testing"
 	"time"
@@ -16,260 +15,280 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func TestBuilderAggregatesSnapshot(t *testing.T) {
-	classifier := NewEnvironmentClassifier(ClassifierConfig{
-		LabelKeys:              []string{"clustercost.io/environment"},
-		ProductionLabelValues:  []string{"prod"},
-		SystemNamespaces:       []string{"kube-system"},
-		ProductionNameContains: []string{"prod"},
+func TestBuilder_Build_RequestsLimits(t *testing.T) {
+	clusterID := "test-cluster"
+	builder := NewBuilder(BuilderConfig{ClusterID: clusterID})
+
+	podCPUReq := resource.MustParse("500m")
+	podCPULim := resource.MustParse("1000m")
+	podMemReq := resource.MustParse("128Mi")
+	podMemLim := resource.MustParse("256Mi")
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-pod",
+			Namespace: "default",
+			UID:       "uid-1",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "test-node",
+			Containers: []corev1.Container{
+				{
+					Name: "main",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceCPU:    podCPUReq,
+							corev1.ResourceMemory: podMemReq,
+						},
+						Limits: corev1.ResourceList{
+							corev1.ResourceCPU:    podCPULim,
+							corev1.ResourceMemory: podMemLim,
+						},
+					},
+				},
+			},
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "10.0.0.1",
+		},
+	}
+
+	pods := []*corev1.Pod{pod}
+	nodes := []*corev1.Node{{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
+	}}
+	usage := map[string]kube.PodUsage{}
+	netColl := collector.NetworkCollection{}
+
+	snap := builder.Build(nodes, nil, pods, nil, nil, usage, netColl, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
+
+	if len(snap.Pods) != 1 {
+		t.Fatalf("expected 1 pod, got %d", len(snap.Pods))
+	}
+
+	p := snap.Pods[0]
+
+	// Verify Requests
+	if p.Cpu.RequestMillicores != 500 {
+		t.Errorf("expected 500m CPU request, got %d", p.Cpu.RequestMillicores)
+	}
+	if p.Memory.RequestBytes != uint64(podMemReq.Value()) {
+		t.Errorf("expected %d bytes memory request, got %d", podMemReq.Value(), p.Memory.RequestBytes)
+	}
+
+	// Verify Limits
+	if p.Cpu.LimitMillicores != 1000 {
+		t.Errorf("expected 1000m CPU limit, got %d", p.Cpu.LimitMillicores)
+	}
+	if p.Memory.LimitBytes != uint64(podMemLim.Value()) {
+		t.Errorf("expected %d bytes memory limit, got %d", podMemLim.Value(), p.Memory.LimitBytes)
+	}
+}
+
+func TestBuilder_Build_NetworkConnectionServiceIntent(t *testing.T) {
+	clusterID := "test-cluster"
+	builder := NewBuilder(BuilderConfig{
+		ClusterID:       clusterID,
+		NetworkDetailed: true,
 	})
-	prices := NewNodePriceLookup(map[string]float64{"m6a.large": 0.1}, 0.2)
-	netPrices := NewNetworkPriceLookup(0, nil)
-	builder := NewBuilder("cluster-1", classifier, prices, netPrices)
 
-	node := &corev1.Node{
+	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "node-1",
-			Labels: map[string]string{
-				"node.kubernetes.io/instance-type": "m6a.large",
+			Name:      "source-pod",
+			Namespace: "default",
+			UID:       "uid-1",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "test-node",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "10.0.0.10",
+		},
+	}
+
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "api-service",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.96.0.1",
+		},
+	}
+
+	nodes := []*corev1.Node{{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
+	}}
+	pods := []*corev1.Pod{pod}
+	services := []*corev1.Service{svc}
+
+	flows := []network.Flow{
+		{
+			SrcIP:   netip.MustParseAddr("10.0.0.10"),
+			DstIP:   netip.MustParseAddr("10.96.0.1"),
+			TxBytes: 1024,
+		},
+	}
+
+	netColl := collector.NetworkCollection{Flows: flows}
+	snap := builder.Build(nodes, nil, pods, services, nil, map[string]kube.PodUsage{}, netColl, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
+
+	if len(snap.Connections) != 1 {
+		t.Fatalf("expected 1 connection, got %d", len(snap.Connections))
+	}
+
+	conn := snap.Connections[0]
+	if conn.DstKind != "service" {
+		t.Fatalf("expected dst kind service, got %s", conn.DstKind)
+	}
+	if conn.ServiceMatch != "cluster_ip" {
+		t.Fatalf("expected service match cluster_ip, got %s", conn.ServiceMatch)
+	}
+	if conn.IsEgress {
+		t.Fatalf("expected is_egress false for service dst")
+	}
+	if len(conn.Dst.Services) != 1 || conn.Dst.Services[0].Name != "api-service" {
+		t.Fatalf("expected destination service api-service")
+	}
+}
+
+func TestBuilder_Build_NetworkConnectionIntentScenarios(t *testing.T) {
+	builder := NewBuilder(BuilderConfig{
+		ClusterID:       "test-cluster",
+		NetworkDetailed: true,
+	})
+
+	srcPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "source-pod",
+			Namespace: "default",
+			UID:       "uid-1",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-1",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "10.0.0.10",
+		},
+	}
+
+	dstPod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "backend-pod",
+			Namespace: "default",
+			UID:       "uid-2",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-2",
+		},
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			PodIP: "10.0.1.20",
+		},
+	}
+
+	serviceA := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "service-a",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.96.0.10",
+			ExternalIPs: []string{
+				"172.20.0.10",
 			},
 		},
+		Status: corev1.ServiceStatus{
+			LoadBalancer: corev1.LoadBalancerStatus{
+				Ingress: []corev1.LoadBalancerIngress{{IP: "35.1.2.3"}},
+			},
+		},
+	}
+
+	serviceB := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "service-b",
+			Namespace: "default",
+		},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.96.0.20",
+		},
+	}
+
+	endpoints := []*discoveryv1.EndpointSlice{{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "service-b-slice",
+			Namespace: "default",
+			Labels: map[string]string{
+				discoveryv1.LabelServiceName: "service-b",
+			},
+		},
+		Endpoints: []discoveryv1.Endpoint{{
+			Addresses: []string{"10.0.1.20"},
+		}},
+	}}
+
+	nodes := []*corev1.Node{{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
 		Status: corev1.NodeStatus{
-			Allocatable: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("2000m"),
-				corev1.ResourceMemory: resource.MustParse("4Gi"),
-			},
-			Conditions: []corev1.NodeCondition{
-				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			Addresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: "192.168.1.10"},
 			},
 		},
+	}, {
+		ObjectMeta: metav1.ObjectMeta{Name: "node-2"},
+		Status: corev1.NodeStatus{
+			Addresses: []corev1.NodeAddress{
+				{Type: corev1.NodeInternalIP, Address: "192.168.1.11"},
+			},
+		},
+	}}
+
+	flows := []network.Flow{
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("10.96.0.10"), TxBytes: 100},   // cluster_ip
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("172.20.0.10"), TxBytes: 200},  // external_ip
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("35.1.2.3"), TxBytes: 300},     // lb_ip
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("10.0.1.20"), TxBytes: 400},    // endpoint pod
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("192.168.1.11"), TxBytes: 500}, // node ip
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("10.255.0.1"), TxBytes: 600},   // private
+		{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("8.8.8.8"), TxBytes: 700},      // external
 	}
 
-	nsProd := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "payments",
-			Labels: map[string]string{"clustercost.io/environment": "prod"},
-		},
-	}
-	nsNonProd := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "sandbox",
-		},
+	snap := builder.Build(nodes, nil, []*corev1.Pod{srcPod, dstPod}, []*corev1.Service{serviceA, serviceB}, endpoints, map[string]kube.PodUsage{}, collector.NetworkCollection{Flows: flows}, map[string]kube.NodeUsage{}, map[netip.Addr]string{}, time.Now())
+
+	if len(snap.Connections) != len(flows) {
+		t.Fatalf("expected %d connections, got %d", len(flows), len(snap.Connections))
 	}
 
-	podProd := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "api-0",
-			Namespace: "payments",
-			OwnerReferences: []metav1.OwnerReference{
-				{Kind: "Deployment", Name: "api"},
-			},
-		},
-		Spec: corev1.PodSpec{
-			NodeName: node.Name,
-			Containers: []corev1.Container{
-				{
-					Name: "app",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("500m"),
-							corev1.ResourceMemory: resource.MustParse("1Gi"),
-						},
-					},
-				},
-			},
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning, PodIP: "10.0.0.10"},
+	byDst := map[string]NetworkConnection{}
+	for _, conn := range snap.Connections {
+		byDst[conn.Dst.IP] = conn
 	}
 
-	podNonProd := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "worker-0",
-			Namespace: "sandbox",
-			OwnerReferences: []metav1.OwnerReference{
-				{Kind: "Deployment", Name: "worker"},
-			},
-		},
-		Spec: corev1.PodSpec{
-			NodeName: node.Name,
-			Containers: []corev1.Container{
-				{
-					Name: "worker",
-					Resources: corev1.ResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceCPU:    resource.MustParse("250m"),
-							corev1.ResourceMemory: resource.MustParse("512Mi"),
-						},
-					},
-				},
-			},
-		},
-		Status: corev1.PodStatus{Phase: corev1.PodRunning, PodIP: "10.0.0.11"},
-	}
-
-	memUsage := resource.MustParse("800Mi")
-	usage := map[string]kube.PodUsage{
-		"payments/api-0": {CPUUsageMilli: 400, MemoryUsageBytes: memUsage.Value()},
-		// worker pod intentionally missing to test fallback to requests
-	}
-	networkCollection := collector.NetworkCollection{
-		PodUsage: map[string]kube.PodNetworkUsage{
-			"payments/api-0": {
-				TxBytes:        1024,
-				RxBytes:        2048,
-				TxBytesByClass: map[string]uint64{"public_internet": 1024},
-				RxBytesByClass: map[string]uint64{"public_internet": 2048},
-			},
-		},
-		Flows: []network.Flow{
-			{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("10.0.0.11"), TxBytes: 512, RxBytes: 256},
-			{SrcIP: netip.MustParseAddr("10.0.0.10"), DstIP: netip.MustParseAddr("8.8.8.8"), TxBytes: 512, RxBytes: 128},
-		},
-	}
-
-	serviceAPI := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "api",
-			Namespace: "payments",
-		},
-	}
-	serviceWorker := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "worker",
-			Namespace: "sandbox",
-		},
-	}
-	endpointsAPI := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "api-1",
-			Namespace: "payments",
-			Labels: map[string]string{
-				"kubernetes.io/service-name": "api",
-			},
-		},
-		Endpoints: []discoveryv1.Endpoint{
-			{
-				Addresses: []string{"10.0.0.10"},
-			},
-		},
-	}
-	endpointsWorker := &discoveryv1.EndpointSlice{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "worker-1",
-			Namespace: "sandbox",
-			Labels: map[string]string{
-				"kubernetes.io/service-name": "worker",
-			},
-		},
-		Endpoints: []discoveryv1.Endpoint{
-			{
-				Addresses: []string{"10.0.0.11"},
-			},
-		},
-	}
-
-	snap := builder.Build(
-		[]*corev1.Node{node},
-		[]*corev1.Namespace{nsProd, nsNonProd},
-		[]*corev1.Pod{podProd, podNonProd},
-		[]*corev1.Service{serviceAPI, serviceWorker},
-		[]*discoveryv1.EndpointSlice{endpointsAPI, endpointsWorker},
-		usage,
-		networkCollection,
-		time.Unix(123, 0),
-	)
-
-	if len(snap.Namespaces) != 2 {
-		t.Fatalf("expected 2 namespaces, got %d", len(snap.Namespaces))
-	}
-
-	var prodNS, nonProdNS NamespaceCostRecord
-	for _, ns := range snap.Namespaces {
-		switch ns.Namespace {
-		case "payments":
-			prodNS = ns
-		case "sandbox":
-			nonProdNS = ns
+	assert := func(dstIP, wantKind, wantMatch string, wantEgress bool) {
+		conn, ok := byDst[dstIP]
+		if !ok {
+			t.Fatalf("missing connection for %s", dstIP)
+		}
+		if conn.DstKind != wantKind {
+			t.Fatalf("dst %s kind: got %s want %s", dstIP, conn.DstKind, wantKind)
+		}
+		if conn.ServiceMatch != wantMatch {
+			t.Fatalf("dst %s service match: got %s want %s", dstIP, conn.ServiceMatch, wantMatch)
+		}
+		if conn.IsEgress != wantEgress {
+			t.Fatalf("dst %s is_egress: got %v want %v", dstIP, conn.IsEgress, wantEgress)
 		}
 	}
 
-	if prodNS.Environment != "production" {
-		t.Fatalf("payments env = %s", prodNS.Environment)
-	}
-	if prodNS.PodCount != 1 || prodNS.CPURequestMilli != 500 || prodNS.CPUUsageMilli != 400 {
-		t.Fatalf("unexpected prod namespace stats: %+v", prodNS)
-	}
-	if !almostEqual(prodNS.HourlyCost, 0.025) {
-		t.Fatalf("prod hourly cost %.4f", prodNS.HourlyCost)
-	}
-
-	if nonProdNS.Environment != "nonprod" {
-		t.Fatalf("sandbox env = %s", nonProdNS.Environment)
-	}
-	if nonProdNS.CPUUsageMilli != 250 {
-		t.Fatalf("sandbox usage fallback expected 250, got %d", nonProdNS.CPUUsageMilli)
-	}
-	if !almostEqual(nonProdNS.HourlyCost, 0.0125) {
-		t.Fatalf("sandbox hourly cost %.4f", nonProdNS.HourlyCost)
-	}
-	if prodNS.NetworkTxBytes != 1024 || prodNS.NetworkRxBytes != 2048 {
-		t.Fatalf("prod network totals unexpected: %+v", prodNS)
-	}
-
-	if len(snap.Nodes) != 1 {
-		t.Fatalf("expected single node record")
-	}
-	nodeRec := snap.Nodes[0]
-	if nodeRec.PodCount != 2 {
-		t.Fatalf("node podCount %d", nodeRec.PodCount)
-	}
-	if !almostEqual(nodeRec.CPUUsagePercent, 32.5) {
-		t.Fatalf("node cpu usage percent %.2f", nodeRec.CPUUsagePercent)
-	}
-
-	res := snap.Resources
-	if res.CPURequestMilliTotal != 750 || res.CPUUsageMilliTotal != 650 {
-		t.Fatalf("unexpected cluster cpu totals %+v", res)
-	}
-	if !almostEqual(res.TotalNodeHourlyCost, 0.1) {
-		t.Fatalf("cluster node cost %.4f", res.TotalNodeHourlyCost)
-	}
-	if res.NetworkTxBytesTotal != 1024 || res.NetworkRxBytesTotal != 2048 {
-		t.Fatalf("cluster network totals unexpected: %+v", res)
-	}
-	if len(snap.Network.Pods) != 2 {
-		t.Fatalf("expected 2 pod network records, got %d", len(snap.Network.Pods))
-	}
-	if len(snap.Network.ByClass) != 1 || snap.Network.ByClass[0].Class != "public_internet" {
-		t.Fatalf("network class totals unexpected: %+v", snap.Network.ByClass)
-	}
-	if len(snap.Network.PodConnections) == 0 {
-		t.Fatalf("expected pod connection records")
-	}
-	if len(snap.Network.WorkloadConnections) == 0 {
-		t.Fatalf("expected workload connection records")
-	}
-	if len(snap.Network.NamespaceConnections) == 0 {
-		t.Fatalf("expected namespace connection records")
-	}
-	if !hasServiceConnection(snap.Network.ServiceConnections, "payments", "api", "sandbox", "worker") {
-		t.Fatalf("expected service connection between api and worker")
-	}
-}
-
-func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) < 0.0001
-}
-
-func hasServiceConnection(conns []NetworkConnection, srcNS, srcName, dstNS, dstName string) bool {
-	for _, conn := range conns {
-		if conn.Source.Kind != "service" || conn.Destination.Kind != "service" {
-			continue
-		}
-		if conn.Source.Namespace == srcNS && conn.Source.Name == srcName &&
-			conn.Destination.Namespace == dstNS && conn.Destination.Name == dstName {
-			return true
-		}
-	}
-	return false
+	assert("10.96.0.10", "service", "cluster_ip", false)
+	assert("172.20.0.10", "service", "external_ip", false)
+	assert("35.1.2.3", "service", "load_balancer_ip", false)
+	assert("10.0.1.20", "pod", "endpoint", false)
+	assert("192.168.1.11", "node", "none", false)
+	assert("10.255.0.1", "private", "none", true)
+	assert("8.8.8.8", "external", "none", true)
 }

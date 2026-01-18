@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+
+	"github.com/cilium/ebpf"
 )
 
 // TestMountBPFFS verifies that we can mount the BPF filesystem.
@@ -30,12 +32,29 @@ func TestMountBPFFS(t *testing.T) {
 
 	// Verify we can write to it (the ultimate robust check)
 	// BPF FS only allows directories and BPF objects, NO regular files.
-	// So we test by creating a directory.
-	testDir, err := os.MkdirTemp("/sys/fs/bpf", "test_write_")
+	// Verify we can write to it (the ultimate robust check)
+	// BPF FS only allows directories and BPF objects, NO regular files.
+	// We try to pin a map to the root of the mount.
+
+	// Create a minimal map spec
+	spec := &ebpf.MapSpec{
+		Type:       ebpf.Array,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 1,
+	}
+	m, err := ebpf.NewMap(spec)
 	if err != nil {
-		t.Errorf("Failed to create dir in /sys/fs/bpf: %v", err)
+		t.Fatalf("Failed to create test map: %v", err)
+	}
+	defer m.Close()
+
+	pinPath := "/sys/fs/bpf/test_verify_map"
+	if err := m.Pin(pinPath); err != nil {
+		t.Errorf("Failed to pin map to %s: %v", pinPath, err)
 	} else {
-		t.Logf("Successfully created dir %s", testDir)
-		_ = os.Remove(testDir)
+		t.Logf("Successfully pinned map to %s", pinPath)
+		_ = m.Unpin()
+		_ = os.Remove(pinPath)
 	}
 }

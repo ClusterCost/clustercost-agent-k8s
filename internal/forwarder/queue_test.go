@@ -28,7 +28,7 @@ func TestQueueMemorySpill(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(dir, 50, 3, time.Second, time.Second, 1024, 1, sender, noopLogger())
 
 	if err := queue.Enqueue(AgentReport{ClusterID: "c1"}); err != nil {
@@ -74,16 +74,16 @@ func TestBackoffDuration(t *testing.T) {
 func TestQueueFlushMemorySendsBatch(t *testing.T) {
 	var gotCount int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload map[string][]AgentReport
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		var report AgentReport
+		if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		gotCount = len(payload["reports"])
+		gotCount++
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
 
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(t.TempDir(), 10, 3, time.Second, time.Second, 10*1024, 10, sender, noopLogger())
 
 	reportA := AgentReport{ClusterID: "a"}
@@ -97,7 +97,7 @@ func TestQueueFlushMemorySendsBatch(t *testing.T) {
 
 	queue.flushMemory(context.Background())
 	if gotCount != 2 {
-		t.Fatalf("expected 2 reports in batch, got %d", gotCount)
+		t.Fatalf("expected 2 reports sent individually, got %d", gotCount)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestQueueDiskBatchRespectsBatchBytes(t *testing.T) {
 	defer server.Close()
 
 	dir := t.TempDir()
-	sender := NewSender(server.URL, "", 2*time.Second, false)
+	sender := NewHTTPSender(server.URL, "", 2*time.Second, false)
 	queue := NewQueue(dir, 10, 3, time.Millisecond, time.Second, 120, 0, sender, noopLogger())
 
 	report := AgentReport{ClusterID: strings.Repeat("x", 80)}

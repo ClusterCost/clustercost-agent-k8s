@@ -9,7 +9,6 @@ import (
 	"net/netip"
 	"sync"
 
-	"clustercost-agent-k8s/internal/kube"
 	"clustercost-agent-k8s/internal/network"
 
 	"github.com/cilium/ebpf"
@@ -63,12 +62,30 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		return NetworkCollection{}, err
 	}
 
+	// Build Node Metadata Maps
 	nodeAZ := make(map[string]string, len(nodes))
+	nodeByIP := make(map[netip.Addr]network.PodInfo, len(nodes)) // Treating usage of PodInfo for Nodes for convenience in Classifier
 	for _, node := range nodes {
 		if node == nil {
 			continue
 		}
-		nodeAZ[node.Name] = node.Labels["topology.kubernetes.io/zone"]
+		zone := node.Labels["topology.kubernetes.io/zone"]
+		if zone == "" {
+			zone = node.Labels["failure-domain.beta.kubernetes.io/zone"]
+		}
+		nodeAZ[node.Name] = zone
+
+		// Map Node IPs
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
+				if ip, err := netip.ParseAddr(addr.Address); err == nil {
+					nodeByIP[ip] = network.PodInfo{
+						Node:             node.Name,
+						AvailabilityZone: zone,
+					}
+				}
+			}
+		}
 	}
 
 	podByIP := make(map[netip.Addr]network.PodInfo, len(pods))
@@ -80,6 +97,10 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		if err != nil {
 			continue
 		}
+		// Skip HostNetwork pods to allow traffic to be attributed to the Node (System Traffic)
+		if pod.Spec.HostNetwork {
+			continue
+		}
 		podByIP[ip] = network.PodInfo{
 			Namespace:        pod.Namespace,
 			Pod:              pod.Name,
@@ -88,7 +109,6 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		}
 	}
 
-	result := map[string]kube.PodNetworkUsage{}
 	flows := make([]network.Flow, 0)
 	iter := c.flowMap.Iterate()
 	var key flowKey
@@ -102,34 +122,50 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		if !ok {
 			continue
 		}
-		srcPod, ok := podByIP[srcIP]
-		if !ok {
+		// Filter: only care if Src is a Pod we know OR the Node (Host) itself.
+		// Agent runs on Node. We only care about Src being on THIS node (Pod or Host).
+
+		_, srcIsPod := podByIP[srcIP]
+		// Check if Src is the Node itself
+		_, srcIsNode := nodeByIP[srcIP]
+
+		if !srcIsPod && !srcIsNode {
 			continue
 		}
+
 		delta := c.deltaStats(key, stats)
 		if delta.TxBytes == 0 && delta.RxBytes == 0 {
 			continue
 		}
 		flows = append(flows, network.Flow{
-			SrcIP:   srcIP,
-			DstIP:   dstIP,
-			TxBytes: delta.TxBytes,
-			RxBytes: delta.RxBytes,
+			SrcIP:    srcIP,
+			DstIP:    dstIP,
+			Protocol: key.Proto,
+			TxBytes:  delta.TxBytes,
+			RxBytes:  delta.RxBytes,
 		})
-		class := network.ClassifyEgress(srcPod, dstIP, podByIP)
-		keyStr := fmt.Sprintf("%s/%s", srcPod.Namespace, srcPod.Pod)
-		usage := result[keyStr]
-		usage.TxBytes += delta.TxBytes
-		usage.RxBytes += delta.RxBytes
-		usage.TxBytesByClass = addBytesByClass(usage.TxBytesByClass, class, delta.TxBytes)
-		usage.RxBytesByClass = addBytesByClass(usage.RxBytesByClass, class, delta.RxBytes)
-		result[keyStr] = usage
+	}
+	// DEBUG: Count node flows
+	nodeFlowCount := 0
+	for _, f := range flows {
+		if _, ok := nodeByIP[f.SrcIP]; ok {
+			nodeFlowCount++
+		}
+	}
+	if nodeFlowCount > 0 {
+		c.logger.Debug("collected node network flows", "count", nodeFlowCount, "total_flows", len(flows))
+	} else if len(flows) > 0 {
+		c.logger.Debug("no node flows found", "total_flows", len(flows), "node_ips_count", len(nodeByIP))
 	}
 
 	if err := iter.Err(); err != nil {
-		return NetworkCollection{PodUsage: result, Flows: flows}, fmt.Errorf("iterate eBPF flow map: %w", err)
+		return NetworkCollection{PodUsage: nil, Flows: flows}, fmt.Errorf("iterate eBPF flow map: %w", err)
 	}
-	return NetworkCollection{PodUsage: result, Flows: flows}, nil
+
+	// Aggregate flows
+	podUsage, nodeUsage := AggregateNetworkUsage(flows, podByIP, nodeByIP)
+
+	return NetworkCollection{PodUsage: podUsage, NodeUsage: nodeUsage, Flows: flows}, nil
 }
 
 func (c *ebpfNetworkCollector) ensureMap() error {
@@ -150,30 +186,22 @@ func (c *ebpfNetworkCollector) deltaStats(key flowKey, current flowStats) flowSt
 		c.last[key] = current
 		return current
 	}
-	delta := flowStats{
-		TxBytes: diffUint64Flow(current.TxBytes, last.TxBytes),
-		RxBytes: diffUint64Flow(current.RxBytes, last.RxBytes),
+	// Handle potential restart/counter reset?
+	// If current < last, assume reset.
+	delta := flowStats{}
+	if current.TxBytes >= last.TxBytes {
+		delta.TxBytes = current.TxBytes - last.TxBytes
+	} else {
+		delta.TxBytes = current.TxBytes
 	}
+	if current.RxBytes >= last.RxBytes {
+		delta.RxBytes = current.RxBytes - last.RxBytes
+	} else {
+		delta.RxBytes = current.RxBytes
+	}
+
 	c.last[key] = current
 	return delta
-}
-
-func diffUint64Flow(current, previous uint64) uint64 {
-	if current >= previous {
-		return current - previous
-	}
-	return current
-}
-
-func addBytesByClass(m map[string]uint64, class string, delta uint64) map[string]uint64 {
-	if delta == 0 {
-		return m
-	}
-	if m == nil {
-		m = map[string]uint64{}
-	}
-	m[class] += delta
-	return m
 }
 
 func ipFromFlowKey(raw [16]byte, family uint8) (netip.Addr, bool) {

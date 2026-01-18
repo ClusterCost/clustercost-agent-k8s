@@ -11,7 +11,7 @@ type PodInfo struct {
 }
 
 // ClassifyEgress determines the traffic class for a pod's egress to a destination IP.
-func ClassifyEgress(src PodInfo, dst netip.Addr, podByIP map[netip.Addr]PodInfo) string {
+func ClassifyEgress(src PodInfo, dst netip.Addr, podByIP map[netip.Addr]PodInfo, nodeByIP map[netip.Addr]PodInfo) string {
 	if !dst.IsValid() {
 		return TrafficClassUnknown
 	}
@@ -26,6 +26,19 @@ func ClassifyEgress(src PodInfo, dst netip.Addr, podByIP map[netip.Addr]PodInfo)
 			return TrafficClassInterAZ
 		}
 		return TrafficClassUnknown
+	}
+	if dstNode, ok := nodeByIP[dst]; ok {
+		// Treat destination node as a "pod" location for AZ comparison
+		if dstNode.Node == src.Node {
+			return TrafficClassIntraNode // Traffic to own node
+		}
+		if dstNode.AvailabilityZone != "" && dstNode.AvailabilityZone == src.AvailabilityZone {
+			return TrafficClassIntraAZ
+		}
+		if dstNode.AvailabilityZone != "" && src.AvailabilityZone != "" {
+			return TrafficClassInterAZ
+		}
+		return TrafficClassVPCPrivate // Node is known but zone mismatch or unknown? Assume private.
 	}
 	if isPrivateIP(dst) {
 		return TrafficClassVPCPrivate
@@ -42,9 +55,9 @@ func isPrivateIP(addr netip.Addr) bool {
 		switch {
 		case v4[0] == 10:
 			return true
-		case v4[0] == 172 && v4[1]&0xf0 == 16:
+		case v4[0] == 172 && v4[1]&0xf0 == 16: // #nosec G602
 			return true
-		case v4[0] == 192 && v4[1] == 168:
+		case v4[0] == 192 && v4[1] == 168: // #nosec G602
 			return true
 		default:
 			return false

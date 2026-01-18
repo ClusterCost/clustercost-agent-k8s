@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package agent.v1;
+
+option go_package = "clustercost-agent-k8s/internal/proto/agent/v1;agentv1";
+
+service Collector {
+  // ReportMetrics sends a batch of resource metrics (Pod/Node) from the agent.
+  rpc ReportMetrics(MetricsReportRequest) returns (ReportResponse);
+
+  // ReportNetwork sends detailed network connection data.
+  rpc ReportNetwork(NetworkReportRequest) returns (ReportResponse);
+}
+
+message MetricsReportRequest {
+  string agent_id = 1;
+  string cluster_id = 2;
+  string node_name = 3;
+  string availability_zone = 4;
+  int64 timestamp_seconds = 5;
+  string region = 6;
+  string instance_type = 7;
+
+  repeated PodMetric pods = 8;
+  repeated NodeMetric nodes = 9;
+}
+
+message NetworkReportRequest {
+  string agent_id = 1;
+  string cluster_id = 2;
+  string node_name = 3;
+  string availability_zone = 4;
+  int64 timestamp_seconds = 5;
+  string region = 6;
+  string instance_type = 7;
+
+  // Optimization: Dictionary Encoding
+  repeated NetworkEndpoint endpoints = 10;
+  repeated CompactNetworkConnection compact_connections = 11;
+
+  // Deprecated: Use endpoints + compact_connections
+  repeated NetworkConnection connections = 8;
+  repeated PodMetric pods = 9;
+}
+
+message CompactNetworkConnection {
+  uint32 src_index = 1; // Index into request.endpoints
+  uint32 dst_index = 2; // Index into request.endpoints
+  uint32 protocol = 3;
+  uint64 bytes_sent = 4;
+  uint64 bytes_received = 5;
+  string egress_class = 6;
+  string dst_kind = 8;
+  string service_match = 9;
+  bool is_egress = 10;
+}
+
+message ReportResponse {
+  bool accepted = 1;
+  string error_message = 2;
+}
+
+message PodMetric {
+  // Metadata Context
+  string pod_uid = 1;
+  string container_id = 2;
+  uint32 pid_tgid = 3;
+  
+  // Include namespace/pod name to help aggregator if K8s API is lagging, 
+  // but strictly spec just says identifiers. 
+  // "The agent must resolve destination IPs..." -> Agent does heavy lifting for network.
+  // Let's keep namespace/name as they are cheap and useful.
+  string namespace = 4;
+  string pod_name = 5;
+
+  // Compute Performance
+  CpuMetrics cpu = 6;
+  MemoryMetrics memory = 7;
+
+  // Cost-Aware Network
+  NetworkMetrics network = 8;
+
+  // Storage I/O
+  StorageMetrics storage = 9;
+}
+
+message CpuMetrics {
+  // K8s Requests (mCPU)
+  uint64 request_millicores = 4;
+  // K8s Limits (mCPU)
+  uint64 limit_millicores = 5;
+  // Usage (mCPU)
+  uint64 usage_millicores = 6;
+}
+
+message MemoryMetrics {
+  // Resident Set Size (bytes)
+  uint64 rss_bytes = 1;
+  // Major page faults
+  uint64 page_faults_major = 2;
+  // K8s Requests (bytes)
+  uint64 request_bytes = 3;
+  // K8s Limits (bytes)
+  uint64 limit_bytes = 4;
+}
+
+message NetworkMetrics {
+  // Throughput
+  uint64 bytes_sent = 1;
+  uint64 bytes_received = 2;
+
+  // Traffic Categorization (Egress Analyzer)
+  uint64 egress_public_bytes = 3;
+  uint64 egress_cross_az_bytes = 4;
+  uint64 egress_internal_bytes = 5;
+}
+
+message NetworkConnection {
+  NetworkEndpoint src = 1;
+  NetworkEndpoint dst = 2;
+  uint32 protocol = 3;
+  uint64 bytes_sent = 4;
+  uint64 bytes_received = 5;
+  string egress_class = 6;
+  string dst_kind = 8;
+  string service_match = 9;
+  bool is_egress = 10;
+}
+
+message NodeMetric {
+  string node_name = 1;
+  uint64 cpu_usage_millicores = 2;
+  uint64 memory_usage_bytes = 3;
+  uint64 capacity_cpu_millicores = 4;
+  uint64 capacity_memory_bytes = 5;
+  uint64 allocatable_cpu_millicores = 6;
+  uint64 allocatable_memory_bytes = 7;
+  uint64 requested_cpu_millicores = 8;
+  uint64 requested_memory_bytes = 9;
+  // Total throttled CPU time from cgroup cpu.stat (ns).
+  uint64 throttling_ns = 10;
+  
+  // Cost-Aware Network (Host traffic)
+  NetworkMetrics network = 11;
+}
+
+message NetworkEndpoint {
+  string ip = 1;
+  string namespace = 2;
+  string pod_name = 3;
+  string node_name = 4;
+  string availability_zone = 5;
+  repeated ServiceRef services = 6;
+  string dns_name = 7;
+}
+
+message ServiceRef {
+  string namespace = 1;
+  string name = 2;
+}
+
+message StorageMetrics {
+  // Throughput
+  uint64 read_bytes = 1;
+  uint64 write_bytes = 2;
+  
+  // IOPS
+  uint64 read_ops = 3;
+  uint64 write_ops = 4;
+
+  // Latency
+  uint64 total_latency_ns = 5; 
+}
