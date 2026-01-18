@@ -55,9 +55,9 @@ func isPrivateIP(addr netip.Addr) bool {
 		switch {
 		case v4[0] == 10:
 			return true
-		case v4[0] == 172 && v4[1]&0xf0 == 16:
+		case v4[0] == 172 && v4[1]&0xf0 == 16: // #nosec G602
 			return true
-		case v4[0] == 192 && v4[1] == 168:
+		case v4[0] == 192 && v4[1] == 168: // #nosec G602
 			return true
 		default:
 			return false

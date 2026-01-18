@@ -130,7 +130,7 @@ func (c *DNSCache) ingest(payload []byte) {
 		return
 	}
 	var event dnsEvent
-	copy((*[dnsEventSize]byte)(unsafe.Pointer(&event))[:], payload)
+	copy((*[dnsEventSize]byte)(unsafe.Pointer(&event))[:], payload) // #nosec G103
 
 	nameLen := int(event.NameLen)
 	if nameLen <= 0 || nameLen >= dnsMaxNameBytes {

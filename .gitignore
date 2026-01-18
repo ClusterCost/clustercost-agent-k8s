@@ -32,3 +32,5 @@ vendor/
 charts/*.tgz
 
 .cache
+
+agent

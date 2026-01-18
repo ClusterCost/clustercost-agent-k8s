@@ -71,7 +71,10 @@ func (m *Manager) loadNetwork(cfg config.NetworkConfig) error {
 		}
 	}
 	if mp := collection.Maps["clustercost_dns_config"]; mp != nil {
-		sample := uint32(cfg.DNSSampleRate)
+		if cfg.DNSSampleRate < 0 {
+			cfg.DNSSampleRate = 0
+		}
+		sample := uint32(cfg.DNSSampleRate) // #nosec G115 -- checked bounds
 		if sample > 100 {
 			sample = 100
 		}

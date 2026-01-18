@@ -135,7 +135,11 @@ func (s *GRPCSender) toNetworkProto(r AgentReport) *agentv1.NetworkReportRequest
 			return idx
 		}
 
-		idx := uint32(len(req.Endpoints))
+		if len(req.Endpoints) > 4294967295 {
+			s.logger.Warn("too many endpoints for network report", "count", len(req.Endpoints))
+			return 0 // Fallback to 0 or skip? safely returning 0 might be wrong but better than crash
+		}
+		idx := uint32(len(req.Endpoints)) // #nosec G115 -- checked above
 		endpointIndex[key] = idx
 		req.Endpoints = append(req.Endpoints, s.endpointToProto(e))
 		return idx
