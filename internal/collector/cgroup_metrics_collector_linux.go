@@ -77,12 +77,13 @@ func (c *cgroupMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*
 
 	for podKey, paths := range c.podToPaths {
 		usage := result[podKey]
-		stats, err := readCPUStat(paths.cpuAcct, paths.cpu)
+		stats, err := readCPUStat(c.logger, paths.cpuAcct, paths.cpu)
 		if err == nil {
 			if !c.at.IsZero() {
 				if prev, ok := c.last[podKey]; ok {
 					deltaNs := diffUint64(stats.UsageNs, prev.UsageNs)
 					dtNs := now.Sub(c.at).Nanoseconds()
+
 					if dtNs > 0 {
 						usage.CPUUsageMilli = int64(math.Round((float64(deltaNs) / float64(dtNs)) * 1000))
 						if usage.CPUUsageMilli < 0 {
@@ -96,7 +97,7 @@ func (c *cgroupMetricsCollector) CollectPodMetrics(ctx context.Context, pods []*
 			c.logger.Debug("read cpu.stat failed", slog.String("pod", podKey), slog.String("error", err.Error()))
 		}
 
-		rss, err := readCgroupMemory(paths.mem)
+		rss, err := readCgroupMemory(c.logger, paths.mem)
 		if err == nil {
 			usage.MemoryRSS = rss
 		}
@@ -193,27 +194,38 @@ func (c *cgroupMetricsCollector) refreshCgroupCache(pods []*corev1.Pod) error {
 	return nil
 }
 
-func readCPUStat(cpuAcctPath, cpuPath string) (cpuStat, error) {
+func readCPUStat(logger *slog.Logger, cpuAcctPath, cpuPath string) (cpuStat, error) {
 	if cpuAcctPath == "" {
 		cpuAcctPath = cpuPath
 	}
 	if cpuPath == "" {
 		cpuPath = cpuAcctPath
 	}
-	if stat, err := readCPUStatV2(cpuPath); err == nil {
+	if stat, err := readCPUStatV2(logger, cpuPath); err == nil {
 		return stat, nil
 	}
-	return readCPUStatV1(cpuAcctPath, cpuPath)
+	return readCPUStatV1(logger, cpuAcctPath, cpuPath)
 }
 
-func readCgroupMemory(memPath string) (uint64, error) {
+func readCgroupMemory(logger *slog.Logger, memPath string) (uint64, error) {
 	if memPath == "" {
 		return 0, fmt.Errorf("memory cgroup path is empty")
 	}
-	if val, err := readUintFromFile(filepath.Join(memPath, "memory.current")); err == nil {
+	path := filepath.Join(memPath, "memory.current")
+	val, err := readUintFromFile(path)
+	if err == nil {
+		if logger != nil && logger.Enabled(context.Background(), slog.LevelDebug) {
+			logger.Debug("read memory.current", slog.String("path", path), slog.Uint64("val", val))
+		}
 		return val, nil
 	}
-	return readUintFromFile(filepath.Join(memPath, "memory.usage_in_bytes"))
+
+	path = filepath.Join(memPath, "memory.usage_in_bytes")
+	val, err = readUintFromFile(path)
+	if logger != nil && logger.Enabled(context.Background(), slog.LevelDebug) {
+		logger.Debug("read memory.usage_in_bytes", slog.String("path", path), slog.Uint64("val", val), slog.Any("error", err))
+	}
+	return val, err
 }
 
 func diffUint64(current, prev uint64) uint64 {
@@ -223,14 +235,20 @@ func diffUint64(current, prev uint64) uint64 {
 	return current - prev
 }
 
-func readCPUStatV2(cgroupPath string) (cpuStat, error) {
+func readCPUStatV2(logger *slog.Logger, cgroupPath string) (cpuStat, error) {
 	if cgroupPath == "" {
 		return cpuStat{}, fmt.Errorf("cpu cgroup path is empty")
 	}
-	data, err := os.ReadFile(filepath.Join(cgroupPath, "cpu.stat"))
+	path := filepath.Join(cgroupPath, "cpu.stat")
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return cpuStat{}, err
 	}
+
+	if logger != nil && logger.Enabled(context.Background(), slog.LevelDebug) {
+		logger.Debug("raw cpu.stat", slog.String("path", path), slog.String("content", string(data)))
+	}
+
 	var out cpuStat
 	lines := strings.Split(string(data), "\n")
 	for _, line := range lines {
@@ -262,7 +280,7 @@ func readCPUStatV2(cgroupPath string) (cpuStat, error) {
 	return out, nil
 }
 
-func readCPUStatV1(cpuAcctPath, cpuPath string) (cpuStat, error) {
+func readCPUStatV1(logger *slog.Logger, cpuAcctPath, cpuPath string) (cpuStat, error) {
 	var out cpuStat
 
 	if cpuAcctPath == "" {

@@ -97,6 +97,10 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		if err != nil {
 			continue
 		}
+		// Skip HostNetwork pods to allow traffic to be attributed to the Node (System Traffic)
+		if pod.Spec.HostNetwork {
+			continue
+		}
 		podByIP[ip] = network.PodInfo{
 			Namespace:        pod.Namespace,
 			Pod:              pod.Name,
@@ -118,16 +122,14 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 		if !ok {
 			continue
 		}
-		// Filter: only care if Src is a Pod we know?
-		// Agent usually runs on Node. We only care about Src being on THIS node?
-		// The BPF map might capture all flows if not filtered by node.
-		// Typically DaemonSet agent filters flows for local pods.
-		// Assuming BPF does filtering or we filter here.
-		// podByIP contains all pods in cluster (from cache).
-		// We should check if Src is in podByIP.
+		// Filter: only care if Src is a Pod we know OR the Node (Host) itself.
+		// Agent runs on Node. We only care about Src being on THIS node (Pod or Host).
+
 		_, srcIsPod := podByIP[srcIP]
-		_, dstIsPod := podByIP[dstIP]
-		if !srcIsPod && !dstIsPod {
+		// Check if Src is the Node itself
+		_, srcIsNode := nodeByIP[srcIP]
+
+		if !srcIsPod && !srcIsNode {
 			continue
 		}
 
@@ -143,15 +145,27 @@ func (c *ebpfNetworkCollector) CollectPodNetwork(ctx context.Context, pods []*co
 			RxBytes:  delta.RxBytes,
 		})
 	}
+	// DEBUG: Count node flows
+	nodeFlowCount := 0
+	for _, f := range flows {
+		if _, ok := nodeByIP[f.SrcIP]; ok {
+			nodeFlowCount++
+		}
+	}
+	if nodeFlowCount > 0 {
+		c.logger.Debug("collected node network flows", "count", nodeFlowCount, "total_flows", len(flows))
+	} else if len(flows) > 0 {
+		c.logger.Debug("no node flows found", "total_flows", len(flows), "node_ips_count", len(nodeByIP))
+	}
 
 	if err := iter.Err(); err != nil {
 		return NetworkCollection{PodUsage: nil, Flows: flows}, fmt.Errorf("iterate eBPF flow map: %w", err)
 	}
 
 	// Aggregate flows
-	usage := AggregateNetworkUsage(flows, podByIP, nodeByIP)
+	podUsage, nodeUsage := AggregateNetworkUsage(flows, podByIP, nodeByIP)
 
-	return NetworkCollection{PodUsage: usage, Flows: flows}, nil
+	return NetworkCollection{PodUsage: podUsage, NodeUsage: nodeUsage, Flows: flows}, nil
 }
 
 func (c *ebpfNetworkCollector) ensureMap() error {

@@ -18,8 +18,9 @@ type NetworkCollectorConfig struct {
 
 // NetworkCollection contains aggregated per-pod usage plus flow deltas.
 type NetworkCollection struct {
-	PodUsage map[string]kube.PodNetworkUsage
-	Flows    []network.Flow
+	PodUsage  map[string]kube.PodNetworkUsage
+	NodeUsage map[string]kube.PodNetworkUsage // Re-using PodNetworkUsage structure as it fits Node needs (Tx/Rx/EgressClasses)
+	Flows     []network.Flow
 }
 
 // NetworkCollector captures per-pod network usage.

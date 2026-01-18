@@ -93,23 +93,23 @@ func (c *cgroupNodeMetricsCollector) CollectNodeMetrics(ctx context.Context, nod
 		c.lastAt = now
 		var throttled uint64
 		if cpuAcctPath != "" || cpuPath != "" {
-			if stats, err := readCPUStat(cpuAcctPath, cpuPath); err == nil {
+			if stats, err := readCPUStat(c.logger, cpuAcctPath, cpuPath); err == nil {
 				c.last = stats
 				throttled = stats.ThrottledNs
 			}
 		}
-		return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: 0, MemoryUsageBytes: readNodeMemoryUsage(memPath), ThrottledNs: throttled}}, nil
+		return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: 0, MemoryUsageBytes: readNodeMemoryUsage(c.logger, memPath), ThrottledNs: throttled}}, nil
 	}
 
 	dtNs := now.Sub(c.lastAt).Nanoseconds()
 	if dtNs <= 0 {
 		var throttled uint64
 		if cpuAcctPath != "" || cpuPath != "" {
-			if stats, err := readCPUStat(cpuAcctPath, cpuPath); err == nil {
+			if stats, err := readCPUStat(c.logger, cpuAcctPath, cpuPath); err == nil {
 				throttled = stats.ThrottledNs
 			}
 		}
-		return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: 0, MemoryUsageBytes: readNodeMemoryUsage(memPath), ThrottledNs: throttled}}, nil
+		return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: 0, MemoryUsageBytes: readNodeMemoryUsage(c.logger, memPath), ThrottledNs: throttled}}, nil
 	}
 
 	var current cpuStat
@@ -117,7 +117,7 @@ func (c *cgroupNodeMetricsCollector) CollectNodeMetrics(ctx context.Context, nod
 		if c.logger != nil && c.logger.Enabled(context.Background(), slog.LevelDebug) {
 			c.logger.Debug("reading node cpu stats", slog.String("cpuAcct", cpuAcctPath), slog.String("cpu", cpuPath))
 		}
-		stats, err := readCPUStat(cpuAcctPath, cpuPath)
+		stats, err := readCPUStat(c.logger, cpuAcctPath, cpuPath)
 		if err != nil {
 			return nil, err
 		}
@@ -144,7 +144,7 @@ func (c *cgroupNodeMetricsCollector) CollectNodeMetrics(ctx context.Context, nod
 	c.lastAt = now
 	c.last = current
 
-	return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: millicores, MemoryUsageBytes: readNodeMemoryUsage(memPath), ThrottledNs: current.ThrottledNs}}, nil
+	return map[string]kube.NodeUsage{nodeKey: {CPUUsageMilli: millicores, MemoryUsageBytes: readNodeMemoryUsage(c.logger, memPath), ThrottledNs: current.ThrottledNs}}, nil
 }
 
 func (c *cgroupNodeMetricsCollector) resolveNodeName(nodes []*corev1.Node) (string, bool) {
@@ -172,8 +172,9 @@ func (c *cgroupNodeMetricsCollector) resolveNodeName(nodes []*corev1.Node) (stri
 	return "", false
 }
 
-func readNodeMemoryUsage(memPath string) int64 {
-	val, err := readCgroupMemory(memPath)
+// readNodeMemoryUsage helper
+func readNodeMemoryUsage(logger *slog.Logger, memPath string) int64 {
+	val, err := readCgroupMemory(logger, memPath)
 	if err != nil {
 		return 0
 	}

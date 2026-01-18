@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/netip"
@@ -25,6 +24,7 @@ import (
 	"clustercost-agent-k8s/internal/version"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/google/uuid"
@@ -171,10 +171,11 @@ func main() {
 	if cfg.Remote.Enabled && cfg.Remote.EndpointURL != "" {
 		if cfg.Remote.Protocol == "grpc" {
 			var err error
-			sender, err = forwarder.NewGRPCSender(ctx, cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout)
+			sender, err = forwarder.NewGRPCSender(ctx, cfg.Remote.EndpointURL, cfg.Remote.AuthToken, cfg.Remote.Timeout, logger)
 			if err != nil {
 				logger.Error("failed to create grpc sender", slog.String("error", err.Error()))
 			} else {
+				logger.Info("connected to agent, starting data transmission via grpc", slog.String("endpoint", cfg.Remote.EndpointURL))
 				go func() {
 					<-ctx.Done()
 					if err := sender.Close(); err != nil {
@@ -208,7 +209,25 @@ func main() {
 	}
 	logger.Info("agent id generated", slog.String("agentId", agentID), slog.String("scope", "stable-node-identity"))
 
-	go runSnapshotLoop(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, clusterID, clusterName, nodeName, agentID, agentVersion, store, cfg.ScrapeInterval(), logger)
+	meta := commonMetadata{
+		clusterID:        clusterID,
+		clusterName:      clusterName,
+		nodeName:         nodeName,
+		agentID:          agentID,
+		version:          agentVersion,
+		availabilityZone: "", // Filled in loops from node labels
+		region:           clusterRegion,
+	}
+
+	networkInterval := 5 * time.Minute
+	if cfg.Network.Enabled {
+		if cfg.Network.ReportIntervalSeconds > 0 {
+			networkInterval = time.Duration(cfg.Network.ReportIntervalSeconds) * time.Second
+		}
+	}
+
+	logger.Info("starting metrics collection", slog.Int("scrape_interval_seconds", cfg.ScrapeIntervalSeconds))
+	go runHybridLoop(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, meta, store, cfg.ScrapeInterval(), networkInterval, logger)
 
 	apiHandler := api.NewHandler(clusterType, clusterName, clusterRegion, agentVersion, agentID, store)
 	mux := http.NewServeMux()
@@ -222,122 +241,177 @@ func main() {
 	}
 }
 
-func runSnapshotLoop(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, interval time.Duration, logger *slog.Logger) {
-	ticker := time.NewTicker(interval)
+func runHybridLoop(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, meta commonMetadata, store *snapshot.Store, scrapeInterval, networkInterval time.Duration, logger *slog.Logger) {
+	ticker := time.NewTicker(scrapeInterval)
 	defer ticker.Stop()
 
-	for {
-		if err := buildOnce(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, clusterID, clusterName, nodeName, agentID, version, store, logger); err != nil {
-			logger.Warn("snapshot refresh failed", slog.String("error", err.Error()))
-		}
+	accumulator := NewFlowAccumulator()
+	lastNetworkReport := time.Now()
 
+	// Initial run
+	processHybridTick(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, meta, store, accumulator, &lastNetworkReport, networkInterval, logger)
+
+	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			processHybridTick(ctx, builder, cache, metricsCollector, networkCollector, nodeMetricsCollector, dnsCache, queue, meta, store, accumulator, &lastNetworkReport, networkInterval, logger)
 		}
 	}
 }
 
-func buildOnce(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, clusterID, clusterName, nodeName, agentID, version string, store *snapshot.Store, logger *slog.Logger) error {
-	nodes, err := cache.NodeLister().List(labels.Everything())
+func processHybridTick(ctx context.Context, builder *snapshot.Builder, cache *kube.ClusterCache, metricsCollector collector.PodMetricsCollector, networkCollector collector.NetworkCollector, nodeMetricsCollector collector.NodeMetricsCollector, dnsCache *collector.DNSCache, queue *forwarder.Queue, meta commonMetadata, store *snapshot.Store, accumulator *FlowAccumulator, lastNetworkReport *time.Time, networkInterval time.Duration, logger *slog.Logger) {
+	nodes, pods, namespaces, services, endpoints, err := getCacheObjects(cache, meta.nodeName)
 	if err != nil {
-		return err
+		logger.Warn("cache list failed", slog.String("error", err.Error()))
+		return
 	}
-	namespaces, err := cache.NamespaceLister().List(labels.Everything())
-	if err != nil {
-		return err
-	}
-	pods, err := cache.PodLister().List(labels.Everything())
-	if err != nil {
-		return err
-	}
-	services, err := cache.ServiceLister().List(labels.Everything())
-	if err != nil {
-		return err
-	}
-	endpoints, err := cache.EndpointsLister().List(labels.Everything())
-	if err != nil {
-		return err
-	}
-
-	if nodeName == "" {
-		return errors.New("node name is required in node-only mode")
-	}
-
-	nodes = filterNodes(nodes, nodeName)
-	pods = filterPods(pods, nodeName)
-
 	if len(nodes) == 0 {
-		return fmt.Errorf("node %q not found in cache", nodeName)
+		logger.Warn("node not found in cache", slog.String("node", meta.nodeName))
+		return
 	}
+	// Update dynamic metadata
+	meta.availabilityZone, meta.region, meta.instanceType = extractNodeMetadata(nodes[0])
 
-	labels := nodes[0].Labels
-	availabilityZone := labels["topology.kubernetes.io/zone"]
-	if availabilityZone == "" {
-		availabilityZone = labels["failure-domain.beta.kubernetes.io/zone"]
-	}
-	region := labels["topology.kubernetes.io/region"]
-	if region == "" {
-		region = labels["failure-domain.beta.kubernetes.io/region"]
-	}
-	instanceType := labels["node.kubernetes.io/instance-type"]
-	if instanceType == "" {
-		instanceType = labels["beta.kubernetes.io/instance-type"]
-	}
-
+	// 1. Collect Metrics (CPU/RAM)
 	metricsCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	usage, metricsErr := metricsCollector.CollectPodMetrics(metricsCtx, pods)
+	usage, err := metricsCollector.CollectPodMetrics(metricsCtx, pods)
 	cancel()
-	if metricsErr != nil {
-		logger.Warn("pod metrics collection failed", slog.String("error", metricsErr.Error()))
+	if err != nil {
+		logger.Warn("pod metrics collection failed", slog.String("error", err.Error()))
 	}
 	if usage == nil {
 		usage = map[string]kube.PodUsage{}
 	}
 
-	networkCtx, cancelNetwork := context.WithTimeout(ctx, 15*time.Second)
-	networkCollection, networkErr := networkCollector.CollectPodNetwork(networkCtx, pods, nodes)
-	cancelNetwork()
-	if networkErr != nil {
-		logger.Warn("network usage collection failed", slog.String("error", networkErr.Error()))
+	// 2. Collect Node Metrics
+	nodeMetricsCtx, cancelNode := context.WithTimeout(ctx, 15*time.Second)
+	nodeUsage, err := nodeMetricsCollector.CollectNodeMetrics(nodeMetricsCtx, nodes)
+	cancelNode()
+	if err != nil {
+		logger.Warn("node metrics collection failed", slog.String("error", err.Error()))
 	}
 
-	nodeMetricsCtx, cancelNodeMetrics := context.WithTimeout(ctx, 15*time.Second)
-	nodeUsage, nodeMetricsErr := nodeMetricsCollector.CollectNodeMetrics(nodeMetricsCtx, nodes)
-	cancelNodeMetrics()
-	if nodeMetricsErr != nil {
-		logger.Warn("node metrics collection failed", slog.String("error", nodeMetricsErr.Error()))
-	}
-	if nodeUsage == nil {
-		nodeUsage = map[string]kube.NodeUsage{}
+	// 3. Collect Network (60s Delta)
+	networkCtx, cancelNet := context.WithTimeout(ctx, 15*time.Second)
+	// Important: This call resets the collector's internal delta reference
+	netCollection, err := networkCollector.CollectPodNetwork(networkCtx, pods, nodes)
+	cancelNet()
+	if err != nil {
+		logger.Warn("network collection failed", slog.String("error", err.Error()))
 	}
 
+	// 4. Send Metrics Report (Immediate)
+	// We want to include the Network Aggregates (PodUsage) in this report as requested.
+	// But we DO NOT want detailed Flows here.
 	dnsNames := map[netip.Addr]string{}
 	if dnsCache != nil {
 		dnsNames = dnsCache.Snapshot()
 	}
 
-	store.Update(builder.Build(nodes, namespaces, pods, services, endpoints, usage, networkCollection, nodeUsage, dnsNames, time.Now().UTC()))
+	// Build Snapshot for Metrics (Flows ignored by setting them to nil effectively, but we pass netCollection which HAS flows?)
+	// Builder.Build handles flows if present. We should strip flows for the metrics report.
+	metricsNetCollection := netCollection
+	metricsNetCollection.Flows = nil // Hide detailed flows from metrics report
+
+	netSnap := builder.Build(nodes, namespaces, pods, services, endpoints, usage, metricsNetCollection, nodeUsage, dnsNames, time.Now().UTC())
+
+	store.Update(netSnap) // Local store sees everything? Or just metrics? Let's update with metrics for now.
 
 	if queue != nil {
 		report := forwarder.AgentReport{
-			ClusterID:        clusterID,
-			ClusterName:      clusterName,
-			NodeName:         nodeName,
-			AvailabilityZone: availabilityZone,
-			Region:           region,
-			InstanceType:     instanceType,
-			AgentID:          agentID,
-			Version:          version,
-			Timestamp:        time.Now().UTC(),
-			Snapshot:         store.LatestSnapshot(),
+			Type:             forwarder.ReportTypeMetrics,
+			ClusterID:        meta.clusterID,
+			ClusterName:      meta.clusterName,
+			NodeName:         meta.nodeName,
+			AvailabilityZone: meta.availabilityZone,
+			Region:           meta.region,
+			InstanceType:     meta.instanceType,
+			AgentID:          meta.agentID,
+			Version:          meta.version,
+			Timestamp:        netSnap.Timestamp,
+			Snapshot:         netSnap,
 		}
 		if err := queue.Enqueue(report); err != nil {
-			logger.Warn("queue enqueue failed", slog.String("error", err.Error()))
+			logger.Warn("queue enqueue metrics failed", slog.String("error", err.Error()))
 		}
 	}
-	return nil
+
+	// 5. Accumulate Flows
+	if len(netCollection.Flows) > 0 {
+		accumulator.Add(netCollection.Flows)
+	}
+
+	// 6. Check Network Report Tick
+	// 6. Check Network Report Tick
+	if time.Since(*lastNetworkReport) >= networkInterval {
+		accumulatedFlows := accumulator.Flush()
+
+		// Chunking Logic
+		// Limit to 1000 flows per report to avoid gRPC size limits
+		const maxFlowsPerReport = 1000
+
+		for i := 0; i < len(accumulatedFlows); i += maxFlowsPerReport {
+			end := i + maxFlowsPerReport
+			if end > len(accumulatedFlows) {
+				end = len(accumulatedFlows)
+			}
+			chunk := accumulatedFlows[i:end]
+
+			// Build Snapshot for Network Chunk
+			networkSnap := builder.Build(nodes, namespaces, pods, services, endpoints, nil, collector.NetworkCollection{Flows: chunk}, nil, dnsNames, time.Now().UTC())
+
+			if queue != nil {
+				report := forwarder.AgentReport{
+					Type:             forwarder.ReportTypeNetwork,
+					ClusterID:        meta.clusterID,
+					ClusterName:      meta.clusterName,
+					NodeName:         meta.nodeName,
+					AvailabilityZone: meta.availabilityZone,
+					Region:           meta.region,
+					InstanceType:     meta.instanceType,
+					AgentID:          meta.agentID,
+					Version:          meta.version,
+					Timestamp:        networkSnap.Timestamp,
+					Snapshot:         networkSnap,
+				}
+				if err := queue.Enqueue(report); err != nil {
+					logger.Warn("queue enqueue network chunk failed", slog.String("error", err.Error()))
+				}
+			}
+		}
+
+		*lastNetworkReport = time.Now()
+		logger.Debug("sent network report", slog.Int("total_flows", len(accumulatedFlows)), slog.Int("chunks", (len(accumulatedFlows)+maxFlowsPerReport-1)/maxFlowsPerReport))
+	}
+}
+
+func getCacheObjects(cache *kube.ClusterCache, nodeName string) ([]*corev1.Node, []*corev1.Pod, []*corev1.Namespace, []*corev1.Service, []*discoveryv1.EndpointSlice, error) {
+	nodes, err := cache.NodeLister().List(labels.Everything())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	namespaces, err := cache.NamespaceLister().List(labels.Everything())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	pods, err := cache.PodLister().List(labels.Everything())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	services, err := cache.ServiceLister().List(labels.Everything())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+	endpoints, err := cache.EndpointsLister().List(labels.Everything())
+	if err != nil {
+		return nil, nil, nil, nil, nil, err
+	}
+
+	nodes = filterNodes(nodes, nodeName)
+	pods = filterPods(pods, nodeName)
+	return nodes, pods, namespaces, services, endpoints, nil
 }
 
 func filterNodes(nodes []*corev1.Node, nodeName string) []*corev1.Node {
@@ -373,4 +447,8 @@ func filterPods(pods []*corev1.Pod, nodeName string) []*corev1.Pod {
 		}
 	}
 	return filtered
+}
+
+type commonMetadata struct {
+	clusterID, clusterName, nodeName, agentID, version, availabilityZone, region, instanceType string
 }

@@ -19,15 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	Collector_Report_FullMethodName = "/agent.v1.Collector/Report"
+	Collector_ReportMetrics_FullMethodName = "/agent.v1.Collector/ReportMetrics"
+	Collector_ReportNetwork_FullMethodName = "/agent.v1.Collector/ReportNetwork"
 )
 
 // CollectorClient is the client API for Collector service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CollectorClient interface {
-	// Report sends a batch of metrics from the agent to the aggregator.
-	Report(ctx context.Context, in *ReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
+	// ReportMetrics sends a batch of resource metrics (Pod/Node) from the agent.
+	ReportMetrics(ctx context.Context, in *MetricsReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
+	// ReportNetwork sends detailed network connection data.
+	ReportNetwork(ctx context.Context, in *NetworkReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
 }
 
 type collectorClient struct {
@@ -38,10 +41,20 @@ func NewCollectorClient(cc grpc.ClientConnInterface) CollectorClient {
 	return &collectorClient{cc}
 }
 
-func (c *collectorClient) Report(ctx context.Context, in *ReportRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
+func (c *collectorClient) ReportMetrics(ctx context.Context, in *MetricsReportRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReportResponse)
-	err := c.cc.Invoke(ctx, Collector_Report_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Collector_ReportMetrics_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *collectorClient) ReportNetwork(ctx context.Context, in *NetworkReportRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportResponse)
+	err := c.cc.Invoke(ctx, Collector_ReportNetwork_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -52,8 +65,10 @@ func (c *collectorClient) Report(ctx context.Context, in *ReportRequest, opts ..
 // All implementations must embed UnimplementedCollectorServer
 // for forward compatibility
 type CollectorServer interface {
-	// Report sends a batch of metrics from the agent to the aggregator.
-	Report(context.Context, *ReportRequest) (*ReportResponse, error)
+	// ReportMetrics sends a batch of resource metrics (Pod/Node) from the agent.
+	ReportMetrics(context.Context, *MetricsReportRequest) (*ReportResponse, error)
+	// ReportNetwork sends detailed network connection data.
+	ReportNetwork(context.Context, *NetworkReportRequest) (*ReportResponse, error)
 	mustEmbedUnimplementedCollectorServer()
 }
 
@@ -61,8 +76,11 @@ type CollectorServer interface {
 type UnimplementedCollectorServer struct {
 }
 
-func (UnimplementedCollectorServer) Report(context.Context, *ReportRequest) (*ReportResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Report not implemented")
+func (UnimplementedCollectorServer) ReportMetrics(context.Context, *MetricsReportRequest) (*ReportResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReportMetrics not implemented")
+}
+func (UnimplementedCollectorServer) ReportNetwork(context.Context, *NetworkReportRequest) (*ReportResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ReportNetwork not implemented")
 }
 func (UnimplementedCollectorServer) mustEmbedUnimplementedCollectorServer() {}
 
@@ -77,20 +95,38 @@ func RegisterCollectorServer(s grpc.ServiceRegistrar, srv CollectorServer) {
 	s.RegisterService(&Collector_ServiceDesc, srv)
 }
 
-func _Collector_Report_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReportRequest)
+func _Collector_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MetricsReportRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(CollectorServer).Report(ctx, in)
+		return srv.(CollectorServer).ReportMetrics(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Collector_Report_FullMethodName,
+		FullMethod: Collector_ReportMetrics_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(CollectorServer).Report(ctx, req.(*ReportRequest))
+		return srv.(CollectorServer).ReportMetrics(ctx, req.(*MetricsReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Collector_ReportNetwork_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(NetworkReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CollectorServer).ReportNetwork(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Collector_ReportNetwork_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CollectorServer).ReportNetwork(ctx, req.(*NetworkReportRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -103,8 +139,12 @@ var Collector_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*CollectorServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Report",
-			Handler:    _Collector_Report_Handler,
+			MethodName: "ReportMetrics",
+			Handler:    _Collector_ReportMetrics_Handler,
+		},
+		{
+			MethodName: "ReportNetwork",
+			Handler:    _Collector_ReportNetwork_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

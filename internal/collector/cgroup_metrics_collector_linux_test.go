@@ -41,7 +41,8 @@ func TestMapPodCgroups_WithChildren(t *testing.T) {
 		},
 	}
 
-	podToPath, err := mapPodCgroups(root, []*corev1.Pod{pod})
+	c := &cgroupMetricsCollector{}
+	podToPath, err := c.mapPodCgroups(root, []*corev1.Pod{pod})
 	if err != nil {
 		t.Fatalf("mapPodCgroups: %v", err)
 	}

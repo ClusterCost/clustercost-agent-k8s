@@ -3,6 +3,7 @@ package forwarder
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -21,10 +22,11 @@ type GRPCSender struct {
 	endpoint  string
 	authToken string
 	timeout   time.Duration
+	logger    *slog.Logger
 }
 
 // NewGRPCSender returns a configured GRPCSender.
-func NewGRPCSender(ctx context.Context, endpoint, authToken string, timeout time.Duration) (*GRPCSender, error) {
+func NewGRPCSender(ctx context.Context, endpoint, authToken string, timeout time.Duration, logger *slog.Logger) (*GRPCSender, error) {
 	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
@@ -47,6 +49,7 @@ func NewGRPCSender(ctx context.Context, endpoint, authToken string, timeout time
 		endpoint:  endpoint,
 		authToken: authToken,
 		timeout:   timeout,
+		logger:    logger,
 	}, nil
 }
 
@@ -55,7 +58,6 @@ func (s *GRPCSender) Close() error {
 }
 
 func (s *GRPCSender) Send(ctx context.Context, report AgentReport) error {
-	req := s.toProto(report)
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
@@ -63,12 +65,26 @@ func (s *GRPCSender) Send(ctx context.Context, report AgentReport) error {
 		ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+s.authToken)
 	}
 
-	_, err := s.client.Report(ctx, req)
+	if report.Type == ReportTypeNetwork {
+		if s.logger != nil {
+			s.logger.Debug("sending network report via grpc", slog.String("endpoint", s.endpoint))
+		}
+		req := s.toNetworkProto(report)
+		_, err := s.client.ReportNetwork(ctx, req)
+		return err
+	}
+
+	// Default to metrics
+	if s.logger != nil {
+		s.logger.Debug("sending metrics report via grpc", slog.String("endpoint", s.endpoint))
+	}
+	req := s.toMetricsProto(report)
+	_, err := s.client.ReportMetrics(ctx, req)
 	return err
 }
 
-func (s *GRPCSender) toProto(r AgentReport) *agentv1.ReportRequest {
-	req := &agentv1.ReportRequest{
+func (s *GRPCSender) toMetricsProto(r AgentReport) *agentv1.MetricsReportRequest {
+	req := &agentv1.MetricsReportRequest{
 		ClusterId:        r.ClusterID,
 		NodeName:         r.NodeName,
 		AvailabilityZone: r.AvailabilityZone,
@@ -81,11 +97,68 @@ func (s *GRPCSender) toProto(r AgentReport) *agentv1.ReportRequest {
 	for _, p := range r.Snapshot.Pods {
 		req.Pods = append(req.Pods, s.podMetricToProto(p))
 	}
-	for _, c := range r.Snapshot.Connections {
-		req.Connections = append(req.Connections, s.connectionToProto(c))
-	}
 	for _, n := range r.Snapshot.Nodes {
 		req.Nodes = append(req.Nodes, s.nodeMetricToProto(n))
+	}
+
+	return req
+}
+
+func (s *GRPCSender) toNetworkProto(r AgentReport) *agentv1.NetworkReportRequest {
+	req := &agentv1.NetworkReportRequest{
+		ClusterId:        r.ClusterID,
+		NodeName:         r.NodeName,
+		AvailabilityZone: r.AvailabilityZone,
+		Region:           r.Region,
+		InstanceType:     r.InstanceType,
+		AgentId:          r.AgentID,
+		TimestampSeconds: r.Timestamp.Unix(),
+	}
+
+	// Deduplication Map (IPKey -> Index)
+	// Using IP as the unique key because an IP at a given time resolves to one entity.
+	// We might need a composite key if IP is not enough, but NetworkEndpoint has all metadata.
+	// To be safe, we can serialize the endpoint to string as key? Or just use IP?
+	// The Snapshot Builder resolves IP -> Metadata. This mapping is static for the snapshot.
+	// So IP is a sufficient key for *within* this snapshot unless we have overlapping IPs (not within same snapshot usually).
+	// Actually, let's use the full Endpoint content as key to be absolutely safe (e.g. if DNS name differs).
+	endpointIndex := make(map[string]uint32)
+
+	getOrAddEndpoint := func(e snapshot.NetworkEndpoint) uint32 {
+		// Simple unique string key: IP + Pod + NS
+		// Or marshaled proto?
+		// Sufficient key: IP
+		// If builder resolved same IP to different Metadata in same snapshot, that would be weird.
+		// Let's use IP as key.
+		key := e.IP
+		if idx, ok := endpointIndex[key]; ok {
+			return idx
+		}
+
+		idx := uint32(len(req.Endpoints))
+		endpointIndex[key] = idx
+		req.Endpoints = append(req.Endpoints, s.endpointToProto(e))
+		return idx
+	}
+
+	for _, c := range r.Snapshot.Connections {
+		srcIdx := getOrAddEndpoint(c.Src)
+		dstIdx := getOrAddEndpoint(c.Dst)
+
+		req.CompactConnections = append(req.CompactConnections, &agentv1.CompactNetworkConnection{
+			SrcIndex:      srcIdx,
+			DstIndex:      dstIdx,
+			Protocol:      c.Protocol,
+			BytesSent:     c.BytesSent,
+			BytesReceived: c.BytesReceived,
+			EgressClass:   c.EgressClass,
+			DstKind:       c.DstKind,
+			ServiceMatch:  c.ServiceMatch,
+			IsEgress:      c.IsEgress,
+		})
+	}
+	for _, p := range r.Snapshot.Pods {
+		req.Pods = append(req.Pods, s.podMetricToProto(p))
 	}
 
 	return req
@@ -126,20 +199,6 @@ func (s *GRPCSender) podMetricToProto(p snapshot.PodMetric) *agentv1.PodMetric {
 	}
 }
 
-func (s *GRPCSender) connectionToProto(c snapshot.NetworkConnection) *agentv1.NetworkConnection {
-	return &agentv1.NetworkConnection{
-		Src:           s.endpointToProto(c.Src),
-		Dst:           s.endpointToProto(c.Dst),
-		Protocol:      c.Protocol,
-		BytesSent:     c.BytesSent,
-		BytesReceived: c.BytesReceived,
-		EgressClass:   c.EgressClass,
-		DstKind:       c.DstKind,
-		ServiceMatch:  c.ServiceMatch,
-		IsEgress:      c.IsEgress,
-	}
-}
-
 func (s *GRPCSender) endpointToProto(e snapshot.NetworkEndpoint) *agentv1.NetworkEndpoint {
 	endpoint := &agentv1.NetworkEndpoint{
 		Ip:               e.IP,
@@ -170,5 +229,12 @@ func (s *GRPCSender) nodeMetricToProto(n snapshot.NodeMetric) *agentv1.NodeMetri
 		RequestedCpuMillicores:   n.RequestedCPUMilli,
 		RequestedMemoryBytes:     n.RequestedMemBytes,
 		ThrottlingNs:             n.ThrottlingNs,
+		Network: &agentv1.NetworkMetrics{
+			BytesSent:           n.Network.BytesSent,
+			BytesReceived:       n.Network.BytesReceived,
+			EgressPublicBytes:   n.Network.EgressPublic,
+			EgressCrossAzBytes:  n.Network.EgressCrossAZ,
+			EgressInternalBytes: n.Network.EgressInternal,
+		},
 	}
 }

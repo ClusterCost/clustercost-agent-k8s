@@ -21,7 +21,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ReportRequest struct {
+type MetricsReportRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AgentId          string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
 	ClusterId        string                 `protobuf:"bytes,2,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
@@ -31,26 +31,25 @@ type ReportRequest struct {
 	Region           string                 `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
 	InstanceType     string                 `protobuf:"bytes,7,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
 	Pods             []*PodMetric           `protobuf:"bytes,8,rep,name=pods,proto3" json:"pods,omitempty"`
-	Connections      []*NetworkConnection   `protobuf:"bytes,9,rep,name=connections,proto3" json:"connections,omitempty"`
-	Nodes            []*NodeMetric          `protobuf:"bytes,10,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Nodes            []*NodeMetric          `protobuf:"bytes,9,rep,name=nodes,proto3" json:"nodes,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *ReportRequest) Reset() {
-	*x = ReportRequest{}
+func (x *MetricsReportRequest) Reset() {
+	*x = MetricsReportRequest{}
 	mi := &file_agent_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ReportRequest) String() string {
+func (x *MetricsReportRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ReportRequest) ProtoMessage() {}
+func (*MetricsReportRequest) ProtoMessage() {}
 
-func (x *ReportRequest) ProtoReflect() protoreflect.Message {
+func (x *MetricsReportRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_agent_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -62,79 +61,306 @@ func (x *ReportRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReportRequest.ProtoReflect.Descriptor instead.
-func (*ReportRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use MetricsReportRequest.ProtoReflect.Descriptor instead.
+func (*MetricsReportRequest) Descriptor() ([]byte, []int) {
 	return file_agent_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ReportRequest) GetAgentId() string {
+func (x *MetricsReportRequest) GetAgentId() string {
 	if x != nil {
 		return x.AgentId
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetClusterId() string {
+func (x *MetricsReportRequest) GetClusterId() string {
 	if x != nil {
 		return x.ClusterId
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetNodeName() string {
+func (x *MetricsReportRequest) GetNodeName() string {
 	if x != nil {
 		return x.NodeName
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetAvailabilityZone() string {
+func (x *MetricsReportRequest) GetAvailabilityZone() string {
 	if x != nil {
 		return x.AvailabilityZone
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetTimestampSeconds() int64 {
+func (x *MetricsReportRequest) GetTimestampSeconds() int64 {
 	if x != nil {
 		return x.TimestampSeconds
 	}
 	return 0
 }
 
-func (x *ReportRequest) GetRegion() string {
+func (x *MetricsReportRequest) GetRegion() string {
 	if x != nil {
 		return x.Region
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetInstanceType() string {
+func (x *MetricsReportRequest) GetInstanceType() string {
 	if x != nil {
 		return x.InstanceType
 	}
 	return ""
 }
 
-func (x *ReportRequest) GetPods() []*PodMetric {
+func (x *MetricsReportRequest) GetPods() []*PodMetric {
 	if x != nil {
 		return x.Pods
 	}
 	return nil
 }
 
-func (x *ReportRequest) GetConnections() []*NetworkConnection {
+func (x *MetricsReportRequest) GetNodes() []*NodeMetric {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+type NetworkReportRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	AgentId          string                 `protobuf:"bytes,1,opt,name=agent_id,json=agentId,proto3" json:"agent_id,omitempty"`
+	ClusterId        string                 `protobuf:"bytes,2,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	NodeName         string                 `protobuf:"bytes,3,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	AvailabilityZone string                 `protobuf:"bytes,4,opt,name=availability_zone,json=availabilityZone,proto3" json:"availability_zone,omitempty"`
+	TimestampSeconds int64                  `protobuf:"varint,5,opt,name=timestamp_seconds,json=timestampSeconds,proto3" json:"timestamp_seconds,omitempty"`
+	Region           string                 `protobuf:"bytes,6,opt,name=region,proto3" json:"region,omitempty"`
+	InstanceType     string                 `protobuf:"bytes,7,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
+	// Optimization: Dictionary Encoding
+	Endpoints          []*NetworkEndpoint          `protobuf:"bytes,10,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+	CompactConnections []*CompactNetworkConnection `protobuf:"bytes,11,rep,name=compact_connections,json=compactConnections,proto3" json:"compact_connections,omitempty"`
+	// Deprecated: Use endpoints + compact_connections
+	Connections   []*NetworkConnection `protobuf:"bytes,8,rep,name=connections,proto3" json:"connections,omitempty"`
+	Pods          []*PodMetric         `protobuf:"bytes,9,rep,name=pods,proto3" json:"pods,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NetworkReportRequest) Reset() {
+	*x = NetworkReportRequest{}
+	mi := &file_agent_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkReportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkReportRequest) ProtoMessage() {}
+
+func (x *NetworkReportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkReportRequest.ProtoReflect.Descriptor instead.
+func (*NetworkReportRequest) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *NetworkReportRequest) GetAgentId() string {
+	if x != nil {
+		return x.AgentId
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetNodeName() string {
+	if x != nil {
+		return x.NodeName
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetAvailabilityZone() string {
+	if x != nil {
+		return x.AvailabilityZone
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetTimestampSeconds() int64 {
+	if x != nil {
+		return x.TimestampSeconds
+	}
+	return 0
+}
+
+func (x *NetworkReportRequest) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetInstanceType() string {
+	if x != nil {
+		return x.InstanceType
+	}
+	return ""
+}
+
+func (x *NetworkReportRequest) GetEndpoints() []*NetworkEndpoint {
+	if x != nil {
+		return x.Endpoints
+	}
+	return nil
+}
+
+func (x *NetworkReportRequest) GetCompactConnections() []*CompactNetworkConnection {
+	if x != nil {
+		return x.CompactConnections
+	}
+	return nil
+}
+
+func (x *NetworkReportRequest) GetConnections() []*NetworkConnection {
 	if x != nil {
 		return x.Connections
 	}
 	return nil
 }
 
-func (x *ReportRequest) GetNodes() []*NodeMetric {
+func (x *NetworkReportRequest) GetPods() []*PodMetric {
 	if x != nil {
-		return x.Nodes
+		return x.Pods
 	}
 	return nil
+}
+
+type CompactNetworkConnection struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SrcIndex      uint32                 `protobuf:"varint,1,opt,name=src_index,json=srcIndex,proto3" json:"src_index,omitempty"` // Index into request.endpoints
+	DstIndex      uint32                 `protobuf:"varint,2,opt,name=dst_index,json=dstIndex,proto3" json:"dst_index,omitempty"` // Index into request.endpoints
+	Protocol      uint32                 `protobuf:"varint,3,opt,name=protocol,proto3" json:"protocol,omitempty"`
+	BytesSent     uint64                 `protobuf:"varint,4,opt,name=bytes_sent,json=bytesSent,proto3" json:"bytes_sent,omitempty"`
+	BytesReceived uint64                 `protobuf:"varint,5,opt,name=bytes_received,json=bytesReceived,proto3" json:"bytes_received,omitempty"`
+	EgressClass   string                 `protobuf:"bytes,6,opt,name=egress_class,json=egressClass,proto3" json:"egress_class,omitempty"`
+	DstKind       string                 `protobuf:"bytes,8,opt,name=dst_kind,json=dstKind,proto3" json:"dst_kind,omitempty"`
+	ServiceMatch  string                 `protobuf:"bytes,9,opt,name=service_match,json=serviceMatch,proto3" json:"service_match,omitempty"`
+	IsEgress      bool                   `protobuf:"varint,10,opt,name=is_egress,json=isEgress,proto3" json:"is_egress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompactNetworkConnection) Reset() {
+	*x = CompactNetworkConnection{}
+	mi := &file_agent_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompactNetworkConnection) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompactNetworkConnection) ProtoMessage() {}
+
+func (x *CompactNetworkConnection) ProtoReflect() protoreflect.Message {
+	mi := &file_agent_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompactNetworkConnection.ProtoReflect.Descriptor instead.
+func (*CompactNetworkConnection) Descriptor() ([]byte, []int) {
+	return file_agent_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CompactNetworkConnection) GetSrcIndex() uint32 {
+	if x != nil {
+		return x.SrcIndex
+	}
+	return 0
+}
+
+func (x *CompactNetworkConnection) GetDstIndex() uint32 {
+	if x != nil {
+		return x.DstIndex
+	}
+	return 0
+}
+
+func (x *CompactNetworkConnection) GetProtocol() uint32 {
+	if x != nil {
+		return x.Protocol
+	}
+	return 0
+}
+
+func (x *CompactNetworkConnection) GetBytesSent() uint64 {
+	if x != nil {
+		return x.BytesSent
+	}
+	return 0
+}
+
+func (x *CompactNetworkConnection) GetBytesReceived() uint64 {
+	if x != nil {
+		return x.BytesReceived
+	}
+	return 0
+}
+
+func (x *CompactNetworkConnection) GetEgressClass() string {
+	if x != nil {
+		return x.EgressClass
+	}
+	return ""
+}
+
+func (x *CompactNetworkConnection) GetDstKind() string {
+	if x != nil {
+		return x.DstKind
+	}
+	return ""
+}
+
+func (x *CompactNetworkConnection) GetServiceMatch() string {
+	if x != nil {
+		return x.ServiceMatch
+	}
+	return ""
+}
+
+func (x *CompactNetworkConnection) GetIsEgress() bool {
+	if x != nil {
+		return x.IsEgress
+	}
+	return false
 }
 
 type ReportResponse struct {
@@ -147,7 +373,7 @@ type ReportResponse struct {
 
 func (x *ReportResponse) Reset() {
 	*x = ReportResponse{}
-	mi := &file_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -159,7 +385,7 @@ func (x *ReportResponse) String() string {
 func (*ReportResponse) ProtoMessage() {}
 
 func (x *ReportResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[1]
+	mi := &file_agent_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -172,7 +398,7 @@ func (x *ReportResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportResponse.ProtoReflect.Descriptor instead.
 func (*ReportResponse) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{1}
+	return file_agent_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ReportResponse) GetAccepted() bool {
@@ -214,7 +440,7 @@ type PodMetric struct {
 
 func (x *PodMetric) Reset() {
 	*x = PodMetric{}
-	mi := &file_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -226,7 +452,7 @@ func (x *PodMetric) String() string {
 func (*PodMetric) ProtoMessage() {}
 
 func (x *PodMetric) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[2]
+	mi := &file_agent_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -239,7 +465,7 @@ func (x *PodMetric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PodMetric.ProtoReflect.Descriptor instead.
 func (*PodMetric) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{2}
+	return file_agent_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PodMetric) GetPodUid() string {
@@ -319,7 +545,7 @@ type CpuMetrics struct {
 
 func (x *CpuMetrics) Reset() {
 	*x = CpuMetrics{}
-	mi := &file_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -331,7 +557,7 @@ func (x *CpuMetrics) String() string {
 func (*CpuMetrics) ProtoMessage() {}
 
 func (x *CpuMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[3]
+	mi := &file_agent_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -344,7 +570,7 @@ func (x *CpuMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CpuMetrics.ProtoReflect.Descriptor instead.
 func (*CpuMetrics) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{3}
+	return file_agent_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CpuMetrics) GetRequestMillicores() uint64 {
@@ -384,7 +610,7 @@ type MemoryMetrics struct {
 
 func (x *MemoryMetrics) Reset() {
 	*x = MemoryMetrics{}
-	mi := &file_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +622,7 @@ func (x *MemoryMetrics) String() string {
 func (*MemoryMetrics) ProtoMessage() {}
 
 func (x *MemoryMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[4]
+	mi := &file_agent_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,7 +635,7 @@ func (x *MemoryMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemoryMetrics.ProtoReflect.Descriptor instead.
 func (*MemoryMetrics) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{4}
+	return file_agent_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *MemoryMetrics) GetRssBytes() uint64 {
@@ -455,7 +681,7 @@ type NetworkMetrics struct {
 
 func (x *NetworkMetrics) Reset() {
 	*x = NetworkMetrics{}
-	mi := &file_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -467,7 +693,7 @@ func (x *NetworkMetrics) String() string {
 func (*NetworkMetrics) ProtoMessage() {}
 
 func (x *NetworkMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[5]
+	mi := &file_agent_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -480,7 +706,7 @@ func (x *NetworkMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkMetrics.ProtoReflect.Descriptor instead.
 func (*NetworkMetrics) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{5}
+	return file_agent_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *NetworkMetrics) GetBytesSent() uint64 {
@@ -535,7 +761,7 @@ type NetworkConnection struct {
 
 func (x *NetworkConnection) Reset() {
 	*x = NetworkConnection{}
-	mi := &file_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -547,7 +773,7 @@ func (x *NetworkConnection) String() string {
 func (*NetworkConnection) ProtoMessage() {}
 
 func (x *NetworkConnection) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[6]
+	mi := &file_agent_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -560,7 +786,7 @@ func (x *NetworkConnection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkConnection.ProtoReflect.Descriptor instead.
 func (*NetworkConnection) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{6}
+	return file_agent_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *NetworkConnection) GetSrc() *NetworkEndpoint {
@@ -638,14 +864,16 @@ type NodeMetric struct {
 	RequestedCpuMillicores   uint64                 `protobuf:"varint,8,opt,name=requested_cpu_millicores,json=requestedCpuMillicores,proto3" json:"requested_cpu_millicores,omitempty"`
 	RequestedMemoryBytes     uint64                 `protobuf:"varint,9,opt,name=requested_memory_bytes,json=requestedMemoryBytes,proto3" json:"requested_memory_bytes,omitempty"`
 	// Total throttled CPU time from cgroup cpu.stat (ns).
-	ThrottlingNs  uint64 `protobuf:"varint,10,opt,name=throttling_ns,json=throttlingNs,proto3" json:"throttling_ns,omitempty"`
+	ThrottlingNs uint64 `protobuf:"varint,10,opt,name=throttling_ns,json=throttlingNs,proto3" json:"throttling_ns,omitempty"`
+	// Cost-Aware Network (Host traffic)
+	Network       *NetworkMetrics `protobuf:"bytes,11,opt,name=network,proto3" json:"network,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NodeMetric) Reset() {
 	*x = NodeMetric{}
-	mi := &file_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -657,7 +885,7 @@ func (x *NodeMetric) String() string {
 func (*NodeMetric) ProtoMessage() {}
 
 func (x *NodeMetric) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[7]
+	mi := &file_agent_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -670,7 +898,7 @@ func (x *NodeMetric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeMetric.ProtoReflect.Descriptor instead.
 func (*NodeMetric) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{7}
+	return file_agent_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *NodeMetric) GetNodeName() string {
@@ -743,6 +971,13 @@ func (x *NodeMetric) GetThrottlingNs() uint64 {
 	return 0
 }
 
+func (x *NodeMetric) GetNetwork() *NetworkMetrics {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
 type NetworkEndpoint struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Ip               string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
@@ -758,7 +993,7 @@ type NetworkEndpoint struct {
 
 func (x *NetworkEndpoint) Reset() {
 	*x = NetworkEndpoint{}
-	mi := &file_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +1005,7 @@ func (x *NetworkEndpoint) String() string {
 func (*NetworkEndpoint) ProtoMessage() {}
 
 func (x *NetworkEndpoint) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[8]
+	mi := &file_agent_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +1018,7 @@ func (x *NetworkEndpoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkEndpoint.ProtoReflect.Descriptor instead.
 func (*NetworkEndpoint) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{8}
+	return file_agent_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *NetworkEndpoint) GetIp() string {
@@ -845,7 +1080,7 @@ type ServiceRef struct {
 
 func (x *ServiceRef) Reset() {
 	*x = ServiceRef{}
-	mi := &file_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -857,7 +1092,7 @@ func (x *ServiceRef) String() string {
 func (*ServiceRef) ProtoMessage() {}
 
 func (x *ServiceRef) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[9]
+	mi := &file_agent_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -870,7 +1105,7 @@ func (x *ServiceRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceRef.ProtoReflect.Descriptor instead.
 func (*ServiceRef) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{9}
+	return file_agent_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ServiceRef) GetNamespace() string {
@@ -903,7 +1138,7 @@ type StorageMetrics struct {
 
 func (x *StorageMetrics) Reset() {
 	*x = StorageMetrics{}
-	mi := &file_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +1150,7 @@ func (x *StorageMetrics) String() string {
 func (*StorageMetrics) ProtoMessage() {}
 
 func (x *StorageMetrics) ProtoReflect() protoreflect.Message {
-	mi := &file_agent_proto_msgTypes[10]
+	mi := &file_agent_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +1163,7 @@ func (x *StorageMetrics) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageMetrics.ProtoReflect.Descriptor instead.
 func (*StorageMetrics) Descriptor() ([]byte, []int) {
-	return file_agent_proto_rawDescGZIP(), []int{10}
+	return file_agent_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StorageMetrics) GetReadBytes() uint64 {
@@ -970,8 +1205,8 @@ var File_agent_proto protoreflect.FileDescriptor
 
 const file_agent_proto_rawDesc = "" +
 	"\n" +
-	"\vagent.proto\x12\bagent.v1\"\x91\x03\n" +
-	"\rReportRequest\x12\x19\n" +
+	"\vagent.proto\x12\bagent.v1\"\xd9\x02\n" +
+	"\x14MetricsReportRequest\x12\x19\n" +
 	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
 	"\n" +
 	"cluster_id\x18\x02 \x01(\tR\tclusterId\x12\x1b\n" +
@@ -980,10 +1215,34 @@ const file_agent_proto_rawDesc = "" +
 	"\x11timestamp_seconds\x18\x05 \x01(\x03R\x10timestampSeconds\x12\x16\n" +
 	"\x06region\x18\x06 \x01(\tR\x06region\x12#\n" +
 	"\rinstance_type\x18\a \x01(\tR\finstanceType\x12'\n" +
-	"\x04pods\x18\b \x03(\v2\x13.agent.v1.PodMetricR\x04pods\x12=\n" +
-	"\vconnections\x18\t \x03(\v2\x1b.agent.v1.NetworkConnectionR\vconnections\x12*\n" +
-	"\x05nodes\x18\n" +
-	" \x03(\v2\x14.agent.v1.NodeMetricR\x05nodes\"Q\n" +
+	"\x04pods\x18\b \x03(\v2\x13.agent.v1.PodMetricR\x04pods\x12*\n" +
+	"\x05nodes\x18\t \x03(\v2\x14.agent.v1.NodeMetricR\x05nodes\"\xfa\x03\n" +
+	"\x14NetworkReportRequest\x12\x19\n" +
+	"\bagent_id\x18\x01 \x01(\tR\aagentId\x12\x1d\n" +
+	"\n" +
+	"cluster_id\x18\x02 \x01(\tR\tclusterId\x12\x1b\n" +
+	"\tnode_name\x18\x03 \x01(\tR\bnodeName\x12+\n" +
+	"\x11availability_zone\x18\x04 \x01(\tR\x10availabilityZone\x12+\n" +
+	"\x11timestamp_seconds\x18\x05 \x01(\x03R\x10timestampSeconds\x12\x16\n" +
+	"\x06region\x18\x06 \x01(\tR\x06region\x12#\n" +
+	"\rinstance_type\x18\a \x01(\tR\finstanceType\x127\n" +
+	"\tendpoints\x18\n" +
+	" \x03(\v2\x19.agent.v1.NetworkEndpointR\tendpoints\x12S\n" +
+	"\x13compact_connections\x18\v \x03(\v2\".agent.v1.CompactNetworkConnectionR\x12compactConnections\x12=\n" +
+	"\vconnections\x18\b \x03(\v2\x1b.agent.v1.NetworkConnectionR\vconnections\x12'\n" +
+	"\x04pods\x18\t \x03(\v2\x13.agent.v1.PodMetricR\x04pods\"\xb6\x02\n" +
+	"\x18CompactNetworkConnection\x12\x1b\n" +
+	"\tsrc_index\x18\x01 \x01(\rR\bsrcIndex\x12\x1b\n" +
+	"\tdst_index\x18\x02 \x01(\rR\bdstIndex\x12\x1a\n" +
+	"\bprotocol\x18\x03 \x01(\rR\bprotocol\x12\x1d\n" +
+	"\n" +
+	"bytes_sent\x18\x04 \x01(\x04R\tbytesSent\x12%\n" +
+	"\x0ebytes_received\x18\x05 \x01(\x04R\rbytesReceived\x12!\n" +
+	"\fegress_class\x18\x06 \x01(\tR\vegressClass\x12\x19\n" +
+	"\bdst_kind\x18\b \x01(\tR\adstKind\x12#\n" +
+	"\rservice_match\x18\t \x01(\tR\fserviceMatch\x12\x1b\n" +
+	"\tis_egress\x18\n" +
+	" \x01(\bR\bisEgress\"Q\n" +
 	"\x0eReportResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xdc\x02\n" +
@@ -1026,7 +1285,7 @@ const file_agent_proto_rawDesc = "" +
 	"\bdst_kind\x18\b \x01(\tR\adstKind\x12#\n" +
 	"\rservice_match\x18\t \x01(\tR\fserviceMatch\x12\x1b\n" +
 	"\tis_egress\x18\n" +
-	" \x01(\bR\bisEgress\"\x82\x04\n" +
+	" \x01(\bR\bisEgress\"\xb6\x04\n" +
 	"\n" +
 	"NodeMetric\x12\x1b\n" +
 	"\tnode_name\x18\x01 \x01(\tR\bnodeName\x120\n" +
@@ -1039,7 +1298,8 @@ const file_agent_proto_rawDesc = "" +
 	"\x18requested_cpu_millicores\x18\b \x01(\x04R\x16requestedCpuMillicores\x124\n" +
 	"\x16requested_memory_bytes\x18\t \x01(\x04R\x14requestedMemoryBytes\x12#\n" +
 	"\rthrottling_ns\x18\n" +
-	" \x01(\x04R\fthrottlingNs\"\xf1\x01\n" +
+	" \x01(\x04R\fthrottlingNs\x122\n" +
+	"\anetwork\x18\v \x01(\v2\x18.agent.v1.NetworkMetricsR\anetwork\"\xf1\x01\n" +
 	"\x0fNetworkEndpoint\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x19\n" +
@@ -1059,9 +1319,10 @@ const file_agent_proto_rawDesc = "" +
 	"writeBytes\x12\x19\n" +
 	"\bread_ops\x18\x03 \x01(\x04R\areadOps\x12\x1b\n" +
 	"\twrite_ops\x18\x04 \x01(\x04R\bwriteOps\x12(\n" +
-	"\x10total_latency_ns\x18\x05 \x01(\x04R\x0etotalLatencyNs2H\n" +
-	"\tCollector\x12;\n" +
-	"\x06Report\x12\x17.agent.v1.ReportRequest\x1a\x18.agent.v1.ReportResponseB7Z5clustercost-agent-k8s/internal/proto/agent/v1;agentv1b\x06proto3"
+	"\x10total_latency_ns\x18\x05 \x01(\x04R\x0etotalLatencyNs2\xa1\x01\n" +
+	"\tCollector\x12I\n" +
+	"\rReportMetrics\x12\x1e.agent.v1.MetricsReportRequest\x1a\x18.agent.v1.ReportResponse\x12I\n" +
+	"\rReportNetwork\x12\x1e.agent.v1.NetworkReportRequest\x1a\x18.agent.v1.ReportResponseB7Z5clustercost-agent-k8s/internal/proto/agent/v1;agentv1b\x06proto3"
 
 var (
 	file_agent_proto_rawDescOnce sync.Once
@@ -1075,38 +1336,46 @@ func file_agent_proto_rawDescGZIP() []byte {
 	return file_agent_proto_rawDescData
 }
 
-var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_agent_proto_goTypes = []any{
-	(*ReportRequest)(nil),     // 0: agent.v1.ReportRequest
-	(*ReportResponse)(nil),    // 1: agent.v1.ReportResponse
-	(*PodMetric)(nil),         // 2: agent.v1.PodMetric
-	(*CpuMetrics)(nil),        // 3: agent.v1.CpuMetrics
-	(*MemoryMetrics)(nil),     // 4: agent.v1.MemoryMetrics
-	(*NetworkMetrics)(nil),    // 5: agent.v1.NetworkMetrics
-	(*NetworkConnection)(nil), // 6: agent.v1.NetworkConnection
-	(*NodeMetric)(nil),        // 7: agent.v1.NodeMetric
-	(*NetworkEndpoint)(nil),   // 8: agent.v1.NetworkEndpoint
-	(*ServiceRef)(nil),        // 9: agent.v1.ServiceRef
-	(*StorageMetrics)(nil),    // 10: agent.v1.StorageMetrics
+	(*MetricsReportRequest)(nil),     // 0: agent.v1.MetricsReportRequest
+	(*NetworkReportRequest)(nil),     // 1: agent.v1.NetworkReportRequest
+	(*CompactNetworkConnection)(nil), // 2: agent.v1.CompactNetworkConnection
+	(*ReportResponse)(nil),           // 3: agent.v1.ReportResponse
+	(*PodMetric)(nil),                // 4: agent.v1.PodMetric
+	(*CpuMetrics)(nil),               // 5: agent.v1.CpuMetrics
+	(*MemoryMetrics)(nil),            // 6: agent.v1.MemoryMetrics
+	(*NetworkMetrics)(nil),           // 7: agent.v1.NetworkMetrics
+	(*NetworkConnection)(nil),        // 8: agent.v1.NetworkConnection
+	(*NodeMetric)(nil),               // 9: agent.v1.NodeMetric
+	(*NetworkEndpoint)(nil),          // 10: agent.v1.NetworkEndpoint
+	(*ServiceRef)(nil),               // 11: agent.v1.ServiceRef
+	(*StorageMetrics)(nil),           // 12: agent.v1.StorageMetrics
 }
 var file_agent_proto_depIdxs = []int32{
-	2,  // 0: agent.v1.ReportRequest.pods:type_name -> agent.v1.PodMetric
-	6,  // 1: agent.v1.ReportRequest.connections:type_name -> agent.v1.NetworkConnection
-	7,  // 2: agent.v1.ReportRequest.nodes:type_name -> agent.v1.NodeMetric
-	3,  // 3: agent.v1.PodMetric.cpu:type_name -> agent.v1.CpuMetrics
-	4,  // 4: agent.v1.PodMetric.memory:type_name -> agent.v1.MemoryMetrics
-	5,  // 5: agent.v1.PodMetric.network:type_name -> agent.v1.NetworkMetrics
-	10, // 6: agent.v1.PodMetric.storage:type_name -> agent.v1.StorageMetrics
-	8,  // 7: agent.v1.NetworkConnection.src:type_name -> agent.v1.NetworkEndpoint
-	8,  // 8: agent.v1.NetworkConnection.dst:type_name -> agent.v1.NetworkEndpoint
-	9,  // 9: agent.v1.NetworkEndpoint.services:type_name -> agent.v1.ServiceRef
-	0,  // 10: agent.v1.Collector.Report:input_type -> agent.v1.ReportRequest
-	1,  // 11: agent.v1.Collector.Report:output_type -> agent.v1.ReportResponse
-	11, // [11:12] is the sub-list for method output_type
-	10, // [10:11] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	4,  // 0: agent.v1.MetricsReportRequest.pods:type_name -> agent.v1.PodMetric
+	9,  // 1: agent.v1.MetricsReportRequest.nodes:type_name -> agent.v1.NodeMetric
+	10, // 2: agent.v1.NetworkReportRequest.endpoints:type_name -> agent.v1.NetworkEndpoint
+	2,  // 3: agent.v1.NetworkReportRequest.compact_connections:type_name -> agent.v1.CompactNetworkConnection
+	8,  // 4: agent.v1.NetworkReportRequest.connections:type_name -> agent.v1.NetworkConnection
+	4,  // 5: agent.v1.NetworkReportRequest.pods:type_name -> agent.v1.PodMetric
+	5,  // 6: agent.v1.PodMetric.cpu:type_name -> agent.v1.CpuMetrics
+	6,  // 7: agent.v1.PodMetric.memory:type_name -> agent.v1.MemoryMetrics
+	7,  // 8: agent.v1.PodMetric.network:type_name -> agent.v1.NetworkMetrics
+	12, // 9: agent.v1.PodMetric.storage:type_name -> agent.v1.StorageMetrics
+	10, // 10: agent.v1.NetworkConnection.src:type_name -> agent.v1.NetworkEndpoint
+	10, // 11: agent.v1.NetworkConnection.dst:type_name -> agent.v1.NetworkEndpoint
+	7,  // 12: agent.v1.NodeMetric.network:type_name -> agent.v1.NetworkMetrics
+	11, // 13: agent.v1.NetworkEndpoint.services:type_name -> agent.v1.ServiceRef
+	0,  // 14: agent.v1.Collector.ReportMetrics:input_type -> agent.v1.MetricsReportRequest
+	1,  // 15: agent.v1.Collector.ReportNetwork:input_type -> agent.v1.NetworkReportRequest
+	3,  // 16: agent.v1.Collector.ReportMetrics:output_type -> agent.v1.ReportResponse
+	3,  // 17: agent.v1.Collector.ReportNetwork:output_type -> agent.v1.ReportResponse
+	16, // [16:18] is the sub-list for method output_type
+	14, // [14:16] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_agent_proto_init() }
@@ -1120,7 +1389,7 @@ func file_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_agent_proto_rawDesc), len(file_agent_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

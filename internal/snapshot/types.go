@@ -74,16 +74,17 @@ type NetworkEndpoint struct {
 }
 
 type NodeMetric struct {
-	NodeName            string `json:"nodeName"`
-	CPUUsageMillicores  uint64 `json:"cpuUsageMillicores"`
-	MemoryUsageBytes    uint64 `json:"memoryUsageBytes"`
-	CapacityCPUMilli    uint64 `json:"capacityCpuMillicores"`
-	CapacityMemoryBytes uint64 `json:"capacityMemoryBytes"`
-	AllocatableCPUMilli uint64 `json:"allocatableCpuMillicores"`
-	AllocatableMemBytes uint64 `json:"allocatableMemoryBytes"`
-	RequestedCPUMilli   uint64 `json:"requestedCpuMillicores"`
-	RequestedMemBytes   uint64 `json:"requestedMemoryBytes"`
-	ThrottlingNs        uint64 `json:"throttlingNs"`
+	NodeName            string         `json:"nodeName"`
+	CPUUsageMillicores  uint64         `json:"cpuUsageMillicores"`
+	MemoryUsageBytes    uint64         `json:"memoryUsageBytes"`
+	CapacityCPUMilli    uint64         `json:"capacityCpuMillicores"`
+	CapacityMemoryBytes uint64         `json:"capacityMemoryBytes"`
+	AllocatableCPUMilli uint64         `json:"allocatableCpuMillicores"`
+	AllocatableMemBytes uint64         `json:"allocatableMemoryBytes"`
+	RequestedCPUMilli   uint64         `json:"requestedCpuMillicores"`
+	RequestedMemBytes   uint64         `json:"requestedMemoryBytes"`
+	ThrottlingNs        uint64         `json:"throttlingNs"`
+	Network             NetworkMetrics `json:"network"`
 }
 
 type ServiceRef struct {

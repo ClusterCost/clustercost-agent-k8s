@@ -57,11 +57,17 @@ func TestAggregateNetworkUsage(t *testing.T) {
 		// 8. Public -> Pod A ingress (1200 bytes)
 		{SrcIP: publicIP, DstIP: podAIP, RxBytes: 1200},
 	}
+	// Aggregate flows
+	podUsage, _ := AggregateNetworkUsage(flows, podByIP, nodeByIP)
 
-	usage := AggregateNetworkUsage(flows, podByIP, nodeByIP)
+	// Check result
+	// Expected: Pod A (Tx), Pod B (Rx), Pod C (Rx), Pod D (Rx) = 4 entries
+	if len(podUsage) != 4 {
+		t.Fatalf("expected 4 pod usage entries, got %d", len(podUsage))
+	}
 
 	keyA := "ns/pod-a"
-	u, ok := usage[keyA]
+	u, ok := podUsage[keyA]
 	if !ok {
 		t.Fatalf("expected usage for %s", keyA)
 	}

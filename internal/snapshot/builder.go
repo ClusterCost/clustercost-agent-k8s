@@ -81,12 +81,18 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 
 	// 2. Process Network Usage
 	aggregatedNetwork := map[string]kube.PodNetworkUsage{}
+	aggregatedNodeNetwork := map[string]kube.PodNetworkUsage{}
 
 	if len(networkCollection.Flows) > 0 {
-		aggregatedNetwork = collector.AggregateNetworkUsage(networkCollection.Flows, podInfoByIP, nodeByIP)
-	} else if len(networkCollection.PodUsage) > 0 {
-		// Fallback or if collector already matches format?
-		aggregatedNetwork = networkCollection.PodUsage
+		aggregatedNetwork, aggregatedNodeNetwork = collector.AggregateNetworkUsage(networkCollection.Flows, podInfoByIP, nodeByIP)
+	} else {
+		// Fallback if collector passed pre-aggregated values
+		if len(networkCollection.PodUsage) > 0 {
+			aggregatedNetwork = networkCollection.PodUsage
+		}
+		if len(networkCollection.NodeUsage) > 0 {
+			aggregatedNodeNetwork = networkCollection.NodeUsage
+		}
 	}
 
 	// 3. Process Pods & Build Metrics
@@ -160,7 +166,7 @@ func (b *Builder) Build(nodes []*corev1.Node, namespaces []*corev1.Namespace, po
 		connections = b.buildNetworkConnections(networkCollection.Flows, podInfoByIP, nodeByIP, services, endpoints, dnsNames)
 	}
 
-	nodeMetrics := buildNodeMetrics(nodes, pods, nodeUsage)
+	nodeMetrics := buildNodeMetrics(nodes, pods, nodeUsage, aggregatedNodeNetwork)
 
 	return Snapshot{
 		Timestamp:   generatedAt,
@@ -213,7 +219,7 @@ type nodeRequestTotals struct {
 	memoryBytes int64
 }
 
-func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string]kube.NodeUsage) []NodeMetric {
+func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string]kube.NodeUsage, netUsage map[string]kube.PodNetworkUsage) []NodeMetric {
 	requests := aggregateNodeRequests(pods)
 	metrics := make([]NodeMetric, 0, len(nodes))
 	for _, node := range nodes {
@@ -222,6 +228,8 @@ func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string
 		}
 		req := requests[node.Name]
 		current := usage[node.Name]
+		net := netUsage[node.Name]
+
 		metrics = append(metrics, NodeMetric{
 			NodeName:            node.Name,
 			CPUUsageMillicores:  clampUint64(current.CPUUsageMilli),
@@ -233,6 +241,13 @@ func buildNodeMetrics(nodes []*corev1.Node, pods []*corev1.Pod, usage map[string
 			RequestedCPUMilli:   clampUint64(req.cpuMilli),
 			RequestedMemBytes:   clampUint64(req.memoryBytes),
 			ThrottlingNs:        current.ThrottledNs,
+			Network: NetworkMetrics{
+				BytesSent:      net.TxBytes,
+				BytesReceived:  net.RxBytes,
+				EgressPublic:   net.EgressPublicBytes,
+				EgressCrossAZ:  net.EgressCrossAZBytes,
+				EgressInternal: net.EgressInternalBytes,
+			},
 		})
 	}
 	return metrics

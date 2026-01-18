@@ -5,11 +5,14 @@ package agent.v1;
 option go_package = "clustercost-agent-k8s/internal/proto/agent/v1;agentv1";
 
 service Collector {
-  // Report sends a batch of metrics from the agent to the aggregator.
-  rpc Report(ReportRequest) returns (ReportResponse);
+  // ReportMetrics sends a batch of resource metrics (Pod/Node) from the agent.
+  rpc ReportMetrics(MetricsReportRequest) returns (ReportResponse);
+
+  // ReportNetwork sends detailed network connection data.
+  rpc ReportNetwork(NetworkReportRequest) returns (ReportResponse);
 }
 
-message ReportRequest {
+message MetricsReportRequest {
   string agent_id = 1;
   string cluster_id = 2;
   string node_name = 3;
@@ -19,8 +22,37 @@ message ReportRequest {
   string instance_type = 7;
 
   repeated PodMetric pods = 8;
-  repeated NetworkConnection connections = 9;
-  repeated NodeMetric nodes = 10;
+  repeated NodeMetric nodes = 9;
+}
+
+message NetworkReportRequest {
+  string agent_id = 1;
+  string cluster_id = 2;
+  string node_name = 3;
+  string availability_zone = 4;
+  int64 timestamp_seconds = 5;
+  string region = 6;
+  string instance_type = 7;
+
+  // Optimization: Dictionary Encoding
+  repeated NetworkEndpoint endpoints = 10;
+  repeated CompactNetworkConnection compact_connections = 11;
+
+  // Deprecated: Use endpoints + compact_connections
+  repeated NetworkConnection connections = 8;
+  repeated PodMetric pods = 9;
+}
+
+message CompactNetworkConnection {
+  uint32 src_index = 1; // Index into request.endpoints
+  uint32 dst_index = 2; // Index into request.endpoints
+  uint32 protocol = 3;
+  uint64 bytes_sent = 4;
+  uint64 bytes_received = 5;
+  string egress_class = 6;
+  string dst_kind = 8;
+  string service_match = 9;
+  bool is_egress = 10;
 }
 
 message ReportResponse {
@@ -107,6 +139,9 @@ message NodeMetric {
   uint64 requested_memory_bytes = 9;
   // Total throttled CPU time from cgroup cpu.stat (ns).
   uint64 throttling_ns = 10;
+  
+  // Cost-Aware Network (Host traffic)
+  NetworkMetrics network = 11;
 }
 
 message NetworkEndpoint {

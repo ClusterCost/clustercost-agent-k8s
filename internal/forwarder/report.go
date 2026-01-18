@@ -16,6 +16,12 @@ type AgentReport struct {
 	InstanceType     string            `json:"instanceType"`
 	AgentID          string            `json:"agentId"`
 	Version          string            `json:"version"`
+	Type             string            `json:"type"` // "metrics" or "network"
 	Timestamp        time.Time         `json:"timestamp"`
 	Snapshot         snapshot.Snapshot `json:"snapshot"`
 }
+
+const (
+	ReportTypeMetrics = "metrics"
+	ReportTypeNetwork = "network"
+)
