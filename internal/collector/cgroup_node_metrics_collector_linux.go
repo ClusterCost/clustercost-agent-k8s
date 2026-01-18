@@ -174,12 +174,29 @@ func (c *cgroupNodeMetricsCollector) resolveNodeName(nodes []*corev1.Node) (stri
 
 // readNodeMemoryUsage helper
 func readNodeMemoryUsage(logger *slog.Logger, memPath string) int64 {
+	// 1. Try cgroup first
 	val, err := readCgroupMemory(logger, memPath)
+	if err == nil && val > 0 {
+		if val > 9223372036854775807 { // MaxInt64
+			return 9223372036854775807
+		}
+		return int64(val)
+	}
+
+	// 2. Fallback to /proc/meminfo
+	// This is often necessary in containers where /sys/fs/cgroup/memory may not reflect the node's
+	// full usage or permissions are restricted.
+	if logger != nil && logger.Enabled(context.Background(), slog.LevelDebug) {
+		logger.Debug("cgroup memory read failed or zero; falling back to /proc/meminfo", slog.Any("error", err))
+	}
+
+	memInfo, err := readProcMemInfo("/proc/meminfo")
 	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to read node memory from both cgroup and /proc/meminfo", slog.String("error", err.Error()))
+		}
 		return 0
 	}
-	if val > 9223372036854775807 { // MaxInt64
-		return 9223372036854775807
-	}
-	return int64(val)
+
+	return memInfo
 }
